@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ZigZag Hairplace - Booking</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script defer src="booking.js"></script>
+</head>
+<body>
+  <div class="page-shell">
+    <header class="site-header">
+      <a class="brand" href="index.html">ZigZag Hairplace</a>
+      <div class="header-actions">
+        <a href="staff.html" class="btn btn-secondary">Staff Portal</a>
+      </div>
+    </header>
+
+    <main>
+      <section class="section about-section">
+        <div class="section-heading">
+          <p class="eyebrow">Booking page</p>
+          <h2>Choose a barber, view their work, and reserve a time.</h2>
+        </div>
+
+        <div class="barber-profile-grid" id="booking-barber-grid"></div>
+
+        <div class="booking-card">
+          <form id="booking-form" class="booking-form">
+            <div class="form-group">
+              <label for="booking-barber">Choose a barber</label>
+              <select id="booking-barber" required></select>
+            </div>
+            <div class="form-row">
+              <div class="form-group half-width">
+                <label for="booking-date">Choose a date</label>
+                <input id="booking-date" type="date" required />
+              </div>
+              <div class="form-group half-width">
+                <label for="booking-time">Selected time</label>
+                <input id="booking-time" type="text" readonly placeholder="Pick a slot after date" required />
+              </div>
+            </div>
+            <div id="booking-slots" class="slot-grid"></div>
+            <div class="form-row">
+              <div class="form-group half-width">
+                <label for="client-name">Your name</label>
+                <input id="client-name" type="text" placeholder="Full name" required />
+              </div>
+              <div class="form-group half-width">
+                <label for="client-phone">Phone number</label>
+                <input id="client-phone" type="tel" placeholder="(555) 123-4567" required />
+              </div>
+            </div>
+            <button class="btn btn-primary" type="submit">Book Appointment</button>
+            <p class="form-note">Barber photos are shown below and available slots update live.</p>
+          </form>
+        </div>
+
+        <div class="booking-card">
+          <h3>Selected stylist gallery</h3>
+          <div id="barber-gallery" class="location-gallery"></div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <p>© 2026 ZigZag Hairplace — Reserve the perfect appointment.</p>
+    </footer>
+  </div>
+  <div id="booking-toast" class="toast hidden"></div>
+</body>
+</html>

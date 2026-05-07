@@ -11,15 +11,8 @@
   <div class="page-shell">
     <header class="site-header">
       <a class="brand" href="#hero">ZigZag Hairplace</a>
-      <nav class="site-nav" aria-label="Primary navigation">
-        <a href="#about">About</a>
-        <a href="#services">Services</a>
-        <a href="#booking">Book</a>
-        <a href="#contact">Contact</a>
-      </nav>
-      <div class="header-actions">
-        <button id="open-booking" class="btn btn-primary">Book Now</button>
-        <button id="open-login" class="btn btn-secondary">Staff Login</button>
+
+        <a id="open-login" class="btn btn-secondary" href="staff.html">Staff Login</a>
       </div>
     </header>
     
@@ -30,8 +23,8 @@
           <h1>ZigZag Hairplace</h1>
           <p>Where master barbers create stunning looks in a premium atmosphere. Book your appointment, choose your stylist, and enjoy fast, flawless service.</p>
           <div class="hero-actions">
-            <button id="hero-book" class="btn btn-primary">Reserve Your Spot</button>
-            <button id="hero-login" class="btn btn-black">Staff Portal</button>
+            <a id="hero-book" class="btn btn-primary" href="booking.html">Reserve Your Spot</a>
+            <a id="hero-login" class="btn btn-black" href="staff.html">Staff Portal</a>
           </div>
           <div class="hero-highlights">
             <div><strong>Elite Stylists</strong><span>Experienced barbers built for modern luxury.</span></div>
@@ -69,31 +62,10 @@
         </div>
       </section>
 
-      <section id="services" class="section service-section">
-        <div class="section-heading">
-          <p class="eyebrow">What we offer</p>
-          <h2>Elevated grooming services with a refined aesthetic.</h2>
-        </div>
-        <div class="service-grid">
-          <article class="service-card">
-            <h3>Precision Haircuts</h3>
-            <p>Custom fades, razor blends, and modern silhouettes tailored to your style.</p>
-          </article>
-          <article class="service-card">
-            <h3>Beard Sculpting</h3>
-            <p>Clean edge-ups, beard trims, and hot towel finish for a polished look.</p>
-          </article>
-          <article class="service-card">
-            <h3>Stylist Consultations</h3>
-            <p>Personalized recommendations from our barbers to keep you looking sharp between visits.</p>
-          </article>
-        </div>
-      </section>
-
       <section id="booking" class="section booking-section">
         <div class="section-heading">
-          <p class="eyebrow">Book an appointment</p>
-          <h2>Choose your barber, select a day, and reserve your time.</h2>
+          <p class="eyebrow">Our barbers</p>
+          <h2>Meet our expert stylists and see their work.</h2>
         </div>
         <div id="barber-profiles" class="barber-profile-grid"></div>
         <div class="booking-card">
@@ -103,18 +75,9 @@
               <select id="booking-barber" required></select>
             </div>
             <div class="form-row">
-            <div class="form-group">
-              <label>Choose a booking window</label>
-              <div class="booking-calendar-panel">
-                <div class="booking-calendar-header">
-                  <button id="prev-booking-month" type="button" class="btn btn-small">&larr;</button>
-                  <span id="booking-calendar-month" class="booking-calendar-month"></span>
-                  <button id="next-booking-month" type="button" class="btn btn-small">&rarr;</button>
-                </div>
-                <div id="booking-calendar" class="calendar-grid"></div>
-                <div id="booking-selected-date" class="booking-selected-date">Selected date: —</div>
-              </div>
-              <input id="booking-date" type="hidden" required />
+              <div class="form-group">
+                <label for="booking-date">Choose a date</label>
+                <input id="booking-date" type="date" required />
               </div>
               <div class="form-group half-width">
                 <label>Available time</label>
@@ -146,15 +109,11 @@
         <div class="contact-grid">
           <div class="contact-box">
             <h3>Our Location</h3>
-            <p>123 Luxe Boulevard<br />Downtown City, 98765</p>
+            <p>Avotu iela 34<br />Latgales priekšpilsēta, Rīga, LV-1009</p>
           </div>
           <div class="contact-box">
-            <h3>Call or Text</h3>
-            <p><a href="tel:+15551234567">(555) 123-4567</a></p>
-          </div>
-          <div class="contact-box">
-            <h3>Hours</h3>
-            <p>Mon–Fri: 10am–8pm<br />Sat: 10am–6pm<br />Sun: Closed</p>
+            <h3>Opening times</h3>
+            <p>Monday<br />11:00 AM - 8:00 PM<br /><br />Tuesday<br />11:00 AM - 8:00 PM<br /><br />Wednesday<br />11:00 AM - 8:00 PM<br /><br />Thursday<br />11:00 AM - 8:00 PM<br /><br />Friday<br />11:00 AM - 8:00 PM<br /><br />Saturday<br />11:00 AM - 8:00 PM<br /><br />Sunday<br />11:00 AM - 8:00 PM</p>
           </div>
         </div>
         <div class="location-grid">

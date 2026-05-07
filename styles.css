@@ -619,6 +619,23 @@ button, input, select {
   font-size: 0.95rem;
 }
 
+.barber-reviews {
+  margin-top: 12px;
+}
+
+.barber-reviews .review-stars {
+  color: #ffd47f;
+  font-size: 1.1rem;
+  margin-bottom: 8px;
+}
+
+.barber-reviews p {
+  margin: 4px 0;
+  font-size: 0.9rem;
+  color: #d6cec6;
+  font-style: italic;
+}
+
 .barber-profile-card .btn-secondary {
   align-self: start;
   padding: 10px 18px;
@@ -899,14 +916,42 @@ button, input, select {
   }
 }
 
-@media (max-width: 680px) {
+@media (max-width: 980px) {
+  .hero-section {
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+
+  .hero-image {
+    min-height: 320px;
+  }
+
+  .hero-card {
+    width: 100%;
+    padding: 20px;
+    right: auto;
+    left: 0;
+  }
+}
+
+@media (max-width: 760px) {
   .site-header {
     flex-direction: column;
-    align-items: flex-start;
+    align-items: stretch;
   }
 
   .site-nav {
     gap: 14px;
+  }
+
+  .header-actions {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .header-actions .btn {
+    width: 100%;
   }
 
   .form-row {
@@ -916,4 +961,77 @@ button, input, select {
   .slot-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .barber-profile-card {
+    grid-template-columns: 1fr;
+  }
+
+  .booking-card,
+  .service-card,
+  .contact-box,
+  .location-map,
+  .dayoff-form-container,
+  .dayoff-calendar-container,
+  .barber-profile-card,
+  .staff-card {
+    padding: 20px;
+  }
+
+  .hero-highlights,
+  .about-grid,
+  .service-grid,
+  .contact-grid,
+  .location-grid,
+  .barber-profile-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .calendar-day {
+    min-height: 80px;
+  }
 }
+
+@media (max-width: 520px) {
+  .page-shell {
+    padding: 0 14px 28px;
+  }
+
+  .brand {
+    font-size: 1.1rem;
+  }
+
+  .hero-copy h1,
+  .section-heading h2 {
+    font-size: clamp(2rem, 10vw, 2.6rem);
+  }
+
+  .hero-copy p,
+  .service-card p,
+  .contact-box p,
+  .barber-profile-info p,
+  .form-group label,
+  .btn,
+  .site-nav a {
+    font-size: 0.95rem;
+  }
+
+  .booking-calendar-panel,
+  .dayoff-form-container,
+  .dayoff-calendar-container {
+    padding: 16px;
+  }
+
+  .slot-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-highlights,
+  .about-grid,
+  .service-grid,
+  .contact-grid,
+  .location-grid,
+  .barber-profile-grid {
+    grid-template-columns: 1fr;
+  }
+}
+

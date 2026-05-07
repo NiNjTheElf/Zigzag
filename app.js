@@ -1,4 +1,4 @@
-const API_BASE = 'http://localhost:3000/api';
+const API_BASE = '/api';
 const STORAGE_KEY_TOKEN = 'zigzagAuthToken';
 const SLOT_TIMES = ['10:00 AM', '11:30 AM', '1:00 PM', '2:30 PM', '4:00 PM', '5:30 PM'];
 const DAYS_OF_WEEK = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -16,11 +16,6 @@ const elements = {
   // Booking
   bookingBarber: document.getElementById('booking-barber'),
   bookingDate: document.getElementById('booking-date'),
-  bookingCalendar: document.getElementById('booking-calendar'),
-  bookingCalendarMonth: document.getElementById('booking-calendar-month'),
-  bookingSelectedDate: document.getElementById('booking-selected-date'),
-  prevBookingMonthBtn: document.getElementById('prev-booking-month'),
-  nextBookingMonthBtn: document.getElementById('next-booking-month'),
   bookingSlots: document.getElementById('booking-slots'),
   bookingTimeInput: document.getElementById('booking-time'),
   bookingForm: document.getElementById('booking-form'),
@@ -85,7 +80,6 @@ let state = {
   dayOffs: [],
   currentMonthAppt: new Date(),
   currentMonthDayoff: new Date(),
-  currentBookingMonth: new Date(),
   autoRefreshInterval: null,
 };
 
@@ -128,81 +122,6 @@ function getFirstDayOfMonth(date) {
 
 function dateToDateKey(date) {
   return formatDateForInput(date);
-}
-
-function renderBookingDateCalendar() {
-  const monthDate = state.currentBookingMonth;
-  const monthName = monthDate.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
-  elements.bookingCalendarMonth.textContent = monthName;
-  elements.bookingCalendar.innerHTML = '';
-
-  const dayNames = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
-  dayNames.forEach(day => {
-    const header = document.createElement('div');
-    header.className = 'calendar-header';
-    header.textContent = day;
-    elements.bookingCalendar.appendChild(header);
-  });
-
-  const firstDay = getFirstDayOfMonth(monthDate);
-  const startOffset = (firstDay + 6) % 7;
-  for (let i = 0; i < startOffset; i++) {
-    const emptyDay = document.createElement('div');
-    emptyDay.className = 'calendar-day other-month';
-    elements.bookingCalendar.appendChild(emptyDay);
-  }
-
-  const today = new Date();
-  const minDate = new Date(today);
-  minDate.setDate(minDate.getDate() + 1);
-  const selectedDateKey = elements.bookingDate.value;
-
-  for (let day = 1; day <= getDaysInMonth(monthDate); day++) {
-    const date = new Date(monthDate.getFullYear(), monthDate.getMonth(), day);
-    const dateKey = formatDateForInput(date);
-    const dayElement = document.createElement('div');
-    dayElement.className = 'calendar-day';
-
-    if (date < minDate) {
-      dayElement.classList.add('other-month');
-      dayElement.style.cursor = 'not-allowed';
-    } else {
-      dayElement.addEventListener('click', () => {
-        selectBookingDate(date);
-      });
-    }
-
-    if (dateKey === selectedDateKey) {
-      dayElement.classList.add('selected');
-    }
-
-    const dayNumber = document.createElement('div');
-    dayNumber.className = 'calendar-day-number';
-    dayNumber.textContent = day;
-    dayElement.appendChild(dayNumber);
-
-    elements.bookingCalendar.appendChild(dayElement);
-  }
-
-  const totalCells = startOffset + getDaysInMonth(monthDate);
-  const remainder = (7 - (totalCells % 7)) % 7;
-  for (let i = 0; i < remainder; i++) {
-    const emptyDay = document.createElement('div');
-    emptyDay.className = 'calendar-day other-month';
-    elements.bookingCalendar.appendChild(emptyDay);
-  }
-}
-
-function selectBookingDate(date) {
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  if (date < tomorrow) return;
-
-  const dateKey = formatDateForInput(date);
-  elements.bookingDate.value = dateKey;
-  elements.bookingSelectedDate.textContent = `Selected date: ${formatDateDisplay(new Date(dateKey + 'T00:00:00'))}`;
-  renderBookingDateCalendar();
-  renderBookingSlots();
 }
 
 function selectDayOffDate(date) {
@@ -468,7 +387,7 @@ function renderBarberProfiles() {
     } else {
       const placeholder = document.createElement('div');
       placeholder.className = 'barber-profile-placeholder';
-      placeholder.textContent = 'Add photos later';
+      placeholder.textContent = 'Portfolio coming soon';
       imageGrid.appendChild(placeholder);
     }
 
@@ -477,7 +396,16 @@ function renderBarberProfiles() {
     const name = document.createElement('strong');
     name.textContent = barber.name;
     const bio = document.createElement('p');
-    bio.textContent = barber.bio || 'Expert stylist with upcoming booking availability.';
+    bio.textContent = barber.bio || 'Expert stylist with years of experience.';
+    
+    const reviews = document.createElement('div');
+    reviews.className = 'barber-reviews';
+    reviews.innerHTML = `
+      <div class="review-stars">★★★★★</div>
+      <p>"Amazing cut! Highly recommend!" - John D.</p>
+      <p>"Best barber in town. Always on point." - Sarah M.</p>
+    `;
+    
     const socials = document.createElement('div');
     socials.className = 'barber-social-links';
     if (barber.instagram) {
@@ -495,20 +423,10 @@ function renderBarberProfiles() {
       socials.appendChild(link);
     }
 
-    const selectButton = document.createElement('button');
-    selectButton.type = 'button';
-    selectButton.className = 'btn btn-secondary';
-    selectButton.textContent = 'Select stylist';
-    selectButton.addEventListener('click', () => {
-      elements.bookingBarber.value = barber.id;
-      renderBookingSlots();
-      document.getElementById('booking').scrollIntoView({ behavior: 'smooth' });
-    });
-
     content.appendChild(name);
     content.appendChild(bio);
+    content.appendChild(reviews);
     if (socials.children.length) content.appendChild(socials);
-    content.appendChild(selectButton);
 
     card.appendChild(imageGrid);
     card.appendChild(content);
@@ -1157,11 +1075,7 @@ async function init() {
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
   elements.bookingDate.value = formatDateForInput(tomorrow);
-  state.currentBookingMonth = new Date(tomorrow.getFullYear(), tomorrow.getMonth(), 1);
   elements.dayoffDate.min = formatDateForInput(new Date());
-
-  renderBookingDateCalendar();
-  selectBookingDate(new Date(tomorrow));
 
   // Event listeners
   elements.bookingForm.addEventListener('submit', handleBookingSubmit);
@@ -1174,14 +1088,6 @@ async function init() {
 
   elements.bookingBarber.addEventListener('change', renderBookingSlots);
   elements.bookingDate.addEventListener('change', renderBookingSlots);
-  elements.prevBookingMonthBtn.addEventListener('click', () => {
-    state.currentBookingMonth.setMonth(state.currentBookingMonth.getMonth() - 1);
-    renderBookingDateCalendar();
-  });
-  elements.nextBookingMonthBtn.addEventListener('click', () => {
-    state.currentBookingMonth.setMonth(state.currentBookingMonth.getMonth() + 1);
-    renderBookingDateCalendar();
-  });
 
   elements.openLogin.addEventListener('click', () => {
     // Auto-fill login form if credentials saved
@@ -1204,10 +1110,10 @@ async function init() {
   elements.logoutButton.addEventListener('click', handleLogout);
 
   elements.heroBook.addEventListener('click', () => {
-    document.getElementById('booking').scrollIntoView({ behavior: 'smooth' });
+    document.location.href = 'booking.html';
   });
   elements.openBooking.addEventListener('click', () => {
-    document.getElementById('booking').scrollIntoView({ behavior: 'smooth' });
+    document.location.href = 'booking.html';
   });
 
   initTabs();
@@ -1215,25 +1121,6 @@ async function init() {
 
   // Load barbers on initial page load
   await populateBarberSelects();
-
-  const token = localStorage.getItem('token');
-  if (token) {
-    try {
-      const response = await apiCall('/api/auth/me');
-      state.currentUser = response.user;
-      await setupDashboard();
-      openModal(elements.dashboardModal);
-    } catch (error) {
-      if (error.message === 'Invalid token') {
-        // Token is invalid/expired, clear it
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        console.log('Token expired, cleared local storage');
-      } else {
-        console.error('Failed to validate token:', error);
-      }
-    }
-  }
 }
 
 init().catch(error => {

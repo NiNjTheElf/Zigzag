@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ZigZag Hairplace - Staff Portal</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script defer src="staff.js"></script>
+</head>
+<body>
+  <div class="page-shell">
+    <header class="site-header">
+      <a class="brand" href="index.html">ZigZag Hairplace</a>
+      <div class="header-actions">
+        <a href="index.html" class="btn btn-secondary">Back to site</a>
+      </div>
+    </header>
+
+    <main>
+      <section class="section about-section">
+        <div class="section-heading">
+          <p class="eyebrow">Staff Portal</p>
+          <h2>Login to manage appointments, profiles, and barber photo galleries.</h2>
+        </div>
+        <div id="login-section" class="booking-card">
+          <h3>Staff login</h3>
+          <form id="staff-login-form" class="booking-form">
+            <div class="form-group">
+              <label for="staff-email">Email</label>
+              <input id="staff-email" type="email" placeholder="boss@zigzag.com" required />
+            </div>
+            <div class="form-group">
+              <label for="staff-password">Password</label>
+              <input id="staff-password" type="password" placeholder="Password" required />
+            </div>
+            <button class="btn btn-primary" type="submit">Sign in</button>
+            <p class="form-note">Boss and barber accounts can access schedules, create team accounts, and upload barber photos.</p>
+          </form>
+        </div>
+
+        <div id="dashboard-section" class="hidden">
+          <div class="dashboard-header-sticky">
+            <div class="dashboard-title-block">
+              <p class="eyebrow">Staff dashboard</p>
+              <h2 id="staff-dashboard-title">Hello, team</h2>
+            </div>
+            <div class="dashboard-actions">
+              <button id="staff-logout-button" class="btn btn-secondary">Log out</button>
+            </div>
+          </div>
+
+          <div class="tabs-nav">
+            <button class="tab-button active" data-tab="appointments">Appointments</button>
+            <button class="tab-button" data-tab="profile">Profile</button>
+            <button class="tab-button boss-only hidden" data-tab="team">Team</button>
+            <button class="tab-button boss-only hidden" data-tab="dayoffs">Day Offs</button>
+          </div>
+
+          <section id="appointments-tab" class="tab-panel active">
+            <div class="booking-card">
+              <h3>Appointment Calendar</h3>
+              <div class="calendar-controls">
+                <button id="prev-appt-month" class="btn btn-small">&larr;</button>
+                <span id="current-appt-month">Month Year</span>
+                <button id="next-appt-month" class="btn btn-small">&rarr;</button>
+              </div>
+              <div id="appointments-calendar" class="calendar-grid"></div>
+            </div>
+            <div class="booking-card">
+              <h3>Day Appointments</h3>
+              <div id="day-appointments-list"></div>
+            </div>
+          </section>
+
+          <section id="profile-tab" class="tab-panel hidden">
+            <div class="booking-card">
+              <h3>Your profile</h3>
+              <form id="profile-form" class="booking-form">
+                <div class="form-group">
+                  <label for="profile-name">Name</label>
+                  <input id="profile-name" type="text" disabled />
+                </div>
+                <div class="form-group">
+                  <label for="profile-bio">Bio</label>
+                  <textarea id="profile-bio" rows="4" placeholder="Tell clients about your specialties"></textarea>
+                </div>
+                <div class="form-row">
+                  <div class="form-group half-width">
+                    <label for="profile-instagram">Instagram</label>
+                    <input id="profile-instagram" type="text" placeholder="@zigzag.barber" />
+                  </div>
+                  <div class="form-group half-width">
+                    <label for="profile-tiktok">TikTok</label>
+                    <input id="profile-tiktok" type="text" placeholder="@zigzag.barber" />
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label for="profile-photos">Photo URLs</label>
+                  <input id="profile-photos" type="text" placeholder="Comma-separated image URLs" />
+                </div>
+                <button class="btn btn-primary" type="submit">Save profile</button>
+              </form>
+            </div>
+
+            <div class="booking-card">
+              <h3>Upload photos</h3>
+              <div class="form-group">
+                <label for="photo-files">Choose images from your device</label>
+                <input id="photo-files" type="file" accept="image/*" multiple />
+              </div>
+              <div id="photo-preview" class="booking-calendar-panel"></div>
+              <button id="upload-photos-button" class="btn btn-primary" type="button">Upload selected photos</button>
+            </div>
+          </section>
+
+          <section id="team-tab" class="tab-panel hidden">
+            <div class="booking-card">
+              <h3>Create barber account</h3>
+              <form id="create-barber-form" class="booking-form">
+                <div class="form-row">
+                  <div class="form-group half-width">
+                    <label for="new-barber-name">Name</label>
+                    <input id="new-barber-name" type="text" required />
+                  </div>
+                  <div class="form-group half-width">
+                    <label for="new-barber-email">Email</label>
+                    <input id="new-barber-email" type="email" required />
+                  </div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group half-width">
+                    <label for="new-barber-password">Password</label>
+                    <input id="new-barber-password" type="password" required />
+                  </div>
+                  <div class="form-group half-width">
+                    <label for="new-barber-role">Role</label>
+                    <select id="new-barber-role">
+                      <option value="barber">Barber</option>
+                      <option value="boss">Boss</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label for="new-barber-bio">Bio</label>
+                  <input id="new-barber-bio" type="text" />
+                </div>
+                <div class="form-row">
+                  <div class="form-group half-width">
+                    <label for="new-barber-instagram">Instagram</label>
+                    <input id="new-barber-instagram" type="text" />
+                  </div>
+                  <div class="form-group half-width">
+                    <label for="new-barber-tiktok">TikTok</label>
+                    <input id="new-barber-tiktok" type="text" />
+                  </div>
+                </div>
+                <button class="btn btn-primary" type="submit">Create account</button>
+              </form>
+            </div>
+
+            <div class="booking-card">
+              <h3>Current staff</h3>
+              <div id="staff-list" class="staff-list"></div>
+            </div>
+          </section>
+
+          <section id="dayoffs-tab" class="tab-panel hidden">
+            <div class="booking-card">
+              <h3>Day Off Calendar</h3>
+              <div class="calendar-controls">
+                <button id="prev-dayoff-month" class="btn btn-small">&larr;</button>
+                <span id="current-dayoff-month">Month Year</span>
+                <button id="next-dayoff-month" class="btn btn-small">&rarr;</button>
+              </div>
+              <div id="dayoffs-calendar" class="calendar-grid"></div>
+            </div>
+            <div class="booking-card">
+              <h3>Set Day Off</h3>
+              <form id="dayoff-form" class="booking-form">
+                <div class="form-group">
+                  <label for="dayoff-date">Selected Date</label>
+                  <input id="dayoff-date" type="text" readonly />
+                </div>
+                <div class="form-group">
+                  <label>
+                    <input id="dayoff-recurring" type="checkbox" /> Recurring weekly
+                  </label>
+                </div>
+                <div class="form-group">
+                  <label for="dayoff-notes">Notes</label>
+                  <input id="dayoff-notes" type="text" placeholder="Optional" />
+                </div>
+                <button class="btn btn-primary" type="submit">Confirm Day Off</button>
+              </form>
+            </div>
+            <div class="booking-card">
+              <h3>Existing day offs</h3>
+              <div id="dayoffs-list" class="dayoff-list"></div>
+            </div>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <p>© 2026 ZigZag Hairplace — Staff portal for bookings and barber galleries.</p>
+    </footer>
+  </div>
+  <div id="staff-toast" class="toast hidden"></div>
+</body>
+</html>

@@ -1,4 +1,7 @@
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
+const multer = require('multer');
 const { Pool } = require('pg');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
@@ -7,10 +10,14 @@ require('dotenv').config();
 
 const app = express();
 
+const uploadsDir = path.join(__dirname, 'uploads');
+fs.mkdirSync(uploadsDir, { recursive: true });
+
 // Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.static('./'));
+app.use('/uploads', express.static(uploadsDir));
 
 // PostgreSQL connection
 const pool = new Pool({
@@ -21,9 +28,65 @@ const pool = new Pool({
   database: process.env.DB_NAME || 'zigzag_hairplace'
 });
 
+const storage = multer.diskStorage({
+  destination: uploadsDir,
+  filename: (req, file, cb) => {
+    const safeName = file.originalname.replace(/[^a-zA-Z0-9.\-]/g, '_');
+    cb(null, `${Date.now()}-${safeName}`);
+  }
+});
+const upload = multer({ storage, limits: { fileSize: 8 * 1024 * 1024 } });
+
 pool.on('error', (err) => {
   console.error('Unexpected error on idle client', err);
 });
+
+const ensureSchema = async () => {
+  const client = await pool.connect();
+  try {
+    await client.query(`
+      ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS bio TEXT,
+        ADD COLUMN IF NOT EXISTS instagram VARCHAR(255),
+        ADD COLUMN IF NOT EXISTS tiktok VARCHAR(255),
+        ADD COLUMN IF NOT EXISTS photo_urls TEXT[],
+        ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+    `);
+
+    await client.query(`
+      ALTER TABLE appointments
+        ADD COLUMN IF NOT EXISTS barber_id INTEGER,
+        ADD COLUMN IF NOT EXISTS client_name VARCHAR(255),
+        ADD COLUMN IF NOT EXISTS client_phone VARCHAR(20),
+        ADD COLUMN IF NOT EXISTS appointment_date DATE,
+        ADD COLUMN IF NOT EXISTS appointment_time VARCHAR(10),
+        ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+    `);
+
+    await client.query(`
+      ALTER TABLE day_offs
+        ADD COLUMN IF NOT EXISTS barber_id INTEGER,
+        ADD COLUMN IF NOT EXISTS day_off_date DATE,
+        ADD COLUMN IF NOT EXISTS is_recurring BOOLEAN DEFAULT FALSE,
+        ADD COLUMN IF NOT EXISTS recurring_day_of_week INTEGER,
+        ADD COLUMN IF NOT EXISTS notes VARCHAR(255),
+        ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+    `);
+  } finally {
+    client.release();
+  }
+};
+
+const initializeDatabase = async () => {
+  const client = await pool.connect();
+  try {
+    console.log('✅ Connected to PostgreSQL database successfully.');
+    await ensureSchema();
+    console.log('✅ Database schema checked and updated.');
+  } finally {
+    client.release();
+  }
+};
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret_key_change_in_production';
 const SLOT_TIMES = ['10:00 AM', '11:30 AM', '1:00 PM', '2:30 PM', '4:00 PM', '5:30 PM'];
@@ -299,6 +362,14 @@ app.post('/api/appointments', async (req, res) => {
   }
 });
 
+app.post('/api/upload', authenticateToken, upload.array('photos', 12), (req, res) => {
+  if (!req.files || req.files.length === 0) {
+    return res.status(400).json({ error: 'No files uploaded' });
+  }
+  const uploaded = req.files.map(file => `/uploads/${file.filename}`);
+  res.json({ uploaded });
+});
+
 // ==================== DAY-OFF ROUTES ====================
 
 app.get('/api/dayoffs', authenticateToken, async (req, res) => {
@@ -399,8 +470,18 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`✨ ZigZag Hairplace server running on http://localhost:${PORT}`);
-  console.log('📦 Database: PostgreSQL');
-});
+const startServer = async () => {
+  try {
+    await initializeDatabase();
+    const PORT = process.env.PORT || 3000;
+    app.listen(PORT, () => {
+      console.log(`✨ ZigZag Hairplace server running on http://localhost:${PORT}`);
+      console.log('📦 Database: PostgreSQL');
+    });
+  } catch (err) {
+    console.error('❌ Server startup failed:', err);
+    process.exit(1);
+  }
+};
+
+startServer();
