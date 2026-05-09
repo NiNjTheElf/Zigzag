@@ -333,6 +333,46 @@ button, input, select {
   margin-top: 26px;
 }
 
+.wide-banner {
+  position: relative;
+  min-height: 320px;
+  margin-top: 28px;
+  border-radius: 28px;
+  overflow: hidden;
+  background-image: url('https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?auto=format&fit=crop&w=1600&q=80');
+  background-size: cover;
+  background-position: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.wide-banner::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(11, 9, 15, 0.55);
+}
+
+.wide-banner-content {
+  position: relative;
+  color: #fff;
+  text-align: center;
+  max-width: 720px;
+  padding: 40px 24px;
+}
+
+.wide-banner-content h2 {
+  margin: 0 0 12px;
+  font-size: clamp(2rem, 3vw, 3.2rem);
+}
+
+.wide-banner-content p {
+  margin: 0;
+  font-size: 1.05rem;
+  color: #f1ede9;
+}
+
 .location-gallery {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

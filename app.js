@@ -65,11 +65,9 @@ const elements = {
   profileBio: document.getElementById('profile-bio'),
   profileInstagram: document.getElementById('profile-instagram'),
   profileTiktok: document.getElementById('profile-tiktok'),
-  profilePhotos: document.getElementById('profile-photos'),
   newBarberBio: document.getElementById('new-barber-bio'),
   newBarberInstagram: document.getElementById('new-barber-instagram'),
   newBarberTiktok: document.getElementById('new-barber-tiktok'),
-  newBarberPhotos: document.getElementById('new-barber-photos'),
 };
 
 let state = {
@@ -933,7 +931,7 @@ async function handleCreateBarber(event) {
   const bio = elements.newBarberBio.value.trim();
   const instagram = elements.newBarberInstagram.value.trim();
   const tiktok = elements.newBarberTiktok.value.trim();
-  const photoUrls = normalizePhotoUrls(elements.newBarberPhotos.value);
+  const photoUrls = [];
 
   if (!name || !email || !password || !role) {
     showToast('Fill in all fields to add a new staff account.');
@@ -956,7 +954,6 @@ function renderProfileForm() {
   elements.profileBio.value = state.currentUser.bio || '';
   elements.profileInstagram.value = state.currentUser.instagram || '';
   elements.profileTiktok.value = state.currentUser.tiktok || '';
-  elements.profilePhotos.value = normalizePhotoUrls(state.currentUser.photo_urls).join(', ');
 }
 
 async function handleProfileSubmit(event) {
@@ -966,7 +963,7 @@ async function handleProfileSubmit(event) {
   const bio = elements.profileBio.value.trim();
   const instagram = elements.profileInstagram.value.trim();
   const tiktok = elements.profileTiktok.value.trim();
-  const photoUrls = normalizePhotoUrls(elements.profilePhotos.value);
+  const photoUrls = [];
 
   try {
     const updated = await updateBarberProfile(state.currentUser.id, { bio, instagram, tiktok, photoUrls });

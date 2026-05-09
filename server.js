@@ -210,7 +210,7 @@ app.put('/api/barbers/:id', authenticateToken, async (req, res) => {
 
 app.delete('/api/barbers/:id', authenticateToken, async (req, res) => {
   if (req.user.role !== 'boss') {
-    return res.status(403).json({ error: 'Only boss can fire barbers' });
+    return res.status(403).json({ error: 'Only senior barber can fire barbers' });
   }
 
   const barberId = parseInt(req.params.id);
@@ -218,20 +218,48 @@ app.delete('/api/barbers/:id', authenticateToken, async (req, res) => {
     return res.status(400).json({ error: 'Invalid barber ID' });
   }
 
+  const { reason } = req.body;
+
   try {
     const result = await pool.query(
-      'DELETE FROM users WHERE id = $1 AND role = $2 RETURNING id',
-      [barberId, 'barber']
+      'DELETE FROM users WHERE id = $1 AND role IN ($2, $3) RETURNING id',
+      [barberId, 'barber', 'junior_barber']
     );
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Barber not found or cannot fire this user' });
     }
 
+    console.log(`Barber ${barberId} fired by ${req.user.id}: ${reason || 'No reason provided'}`);
     res.json({ success: true });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to fire barber' });
+  }
+});
+
+app.delete('/api/appointments/:id', authenticateToken, async (req, res) => {
+  const apptId = parseInt(req.params.id);
+  if (isNaN(apptId)) {
+    return res.status(400).json({ error: 'Invalid appointment ID' });
+  }
+
+  try {
+    const appt = await pool.query('SELECT barber_id FROM appointments WHERE id = $1', [apptId]);
+    if (appt.rows.length === 0) {
+      return res.status(404).json({ error: 'Appointment not found' });
+    }
+
+    const appointment = appt.rows[0];
+    if (req.user.role !== 'boss' && req.user.role !== 'senior_barber' && appointment.barber_id !== req.user.id) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    await pool.query('DELETE FROM appointments WHERE id = $1', [apptId]);
+    res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to delete appointment' });
   }
 });
 

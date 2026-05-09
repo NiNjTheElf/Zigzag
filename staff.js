@@ -36,7 +36,6 @@ const elements = {
   profileBio: document.getElementById('profile-bio'),
   profileInstagram: document.getElementById('profile-instagram'),
   profileTiktok: document.getElementById('profile-tiktok'),
-  profilePhotos: document.getElementById('profile-photos'),
   photoFiles: document.getElementById('photo-files'),
   photoPreview: document.getElementById('photo-preview'),
   uploadPhotosButton: document.getElementById('upload-photos-button'),
@@ -116,6 +115,18 @@ function normalizePhotoUrls(photoData) {
     return photoData.split(',').map(url => url.trim()).filter(Boolean);
   }
   return [];
+}
+
+function roleLabel(role) {
+  switch (role) {
+    case 'boss':
+      return 'Senior Barber';
+    case 'junior_barber':
+      return 'Junior Barber';
+    case 'barber':
+    default:
+      return 'Barber';
+  }
 }
 
 function formatDateForInput(date) {
@@ -201,7 +212,6 @@ function renderProfileForm() {
   elements.profileBio.value = state.user.bio || '';
   elements.profileInstagram.value = state.user.instagram || '';
   elements.profileTiktok.value = state.user.tiktok || '';
-  elements.profilePhotos.value = normalizePhotoUrls(state.user.photo_urls).join(', ');
 }
 
 function renderAppointmentsCalendar() {
@@ -311,8 +321,8 @@ function showDayAppointments(dateKey, appointments) {
       <div class="dayoff-item-info">
         <strong>${appt.client_name} • ${appt.appointment_time}</strong>
         <p>${appt.client_phone}</p>
-        <button class="btn btn-small cancel-appointment" data-id="${appt.id}">Cancel</button>
       </div>
+      <button class="btn btn-small cancel-appointment" data-id="${appt.id}">Cancel</button>
     `;
     elements.dayAppointmentsList.appendChild(item);
   });
@@ -342,18 +352,41 @@ function renderStaffList() {
     const card = document.createElement('div');
     card.className = 'staff-card';
     const info = document.createElement('div');
-    // Format role name
-    const roleLabel = barber.role === 'junior_barber' ? 'Junior Barber' : 
-                      barber.role === 'senior_barber' ? 'Senior Barber' : 
-                      barber.role === 'barber' ? 'Barber' : barber.role;
     info.innerHTML = `
       <strong>${barber.name}</strong>
       <span>${barber.email}</span>
+      <span class="staff-role">${roleLabel(barber.role)}</span>
     `;
     const details = document.createElement('div');
     details.style.textAlign = 'right';
-    details.innerHTML = `<span style="font-size:0.85rem;color:#c9c1b5;">${roleLabel}</span>`;
+    details.innerHTML = `<span style="font-size:0.85rem;color:#c9c1b5;">${roleLabel(barber.role)}</span>`;
     card.appendChild(info);
+    if (state.user && state.user.role === 'boss' && barber.id !== state.user.id) {
+      const fireBtn = document.createElement('button');
+      fireBtn.type = 'button';
+      fireBtn.textContent = 'Fire';
+      fireBtn.className = 'btn btn-secondary';
+      fireBtn.addEventListener('click', async () => {
+        const reason = prompt('Enter firing reason/comment:');
+        if (!reason) {
+          showToast('Canceled: reason required to fire.');
+          return;
+        }
+        const confirmed = confirm(`Fire ${barber.name}?`);
+        if (!confirmed) return;
+        try {
+          await apiCall(`/barbers/${barber.id}`, {
+            method: 'DELETE',
+            body: JSON.stringify({ reason }),
+          });
+          showToast(`${barber.name} has been removed.`);
+          await refreshBarbers();
+        } catch (error) {
+          showToast('Failed to fire barber: ' + error.message);
+        }
+      });
+      card.appendChild(fireBtn);
+    }
     card.appendChild(details);
     elements.staffList.appendChild(card);
   });
@@ -439,6 +472,45 @@ function renderDayOffsCalendar() {
   }
 }
 
+function renderDayOffs() {
+  if (!elements.dayoffsList) return;
+  elements.dayoffsList.innerHTML = '';
+  if (!state.dayOffs.length) {
+    elements.dayoffsList.innerHTML = '<p>No day offs yet.</p>';
+    return;
+  }
+
+  state.dayOffs.forEach(dayOff => {
+    const row = document.createElement('div');
+    row.className = 'dayoff-item';
+    const when = dayOff.is_recurring ? `Every ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dayOff.recurring_day_of_week]}` : dayOff.day_off_date;
+    row.innerHTML = `
+      <div class="dayoff-item-info">
+        <strong>${when}</strong>
+        <p>${dayOff.notes || 'No notes'}</p>
+      </div>
+    `;
+    if (state.user && (state.user.role === 'boss' || dayOff.barber_id === state.user.id)) {
+      const deleteButton = document.createElement('button');
+      deleteButton.type = 'button';
+      deleteButton.className = 'btn btn-small';
+      deleteButton.textContent = 'Delete';
+      deleteButton.addEventListener('click', async () => {
+        if (!confirm('Delete this day off?')) return;
+        try {
+          await apiCall(`/dayoffs/${dayOff.id}`, { method: 'DELETE' });
+          showToast('Day off deleted.');
+          await refreshDayOffs();
+        } catch (error) {
+          showToast('Failed to delete day off: ' + error.message);
+        }
+      });
+      row.appendChild(deleteButton);
+    }
+    elements.dayoffsList.appendChild(row);
+  });
+}
+
 function selectDayOffDate(date) {
   const dateKey = formatDateForInput(date);
   state.selectedDayoffDate = dateKey;
@@ -449,26 +521,6 @@ function selectDayOffDate(date) {
   if (appointmentsOnDate.length > 0) {
     showToast(`Warning: ${appointmentsOnDate.length} appointment(s) on this date. You may need to cancel them manually.`);
   }
-}
-
-function renderDayOffs() {
-  elements.dayoffsList.innerHTML = '';
-  if (!state.dayOffs.length) {
-    elements.dayoffsList.innerHTML = '<p>No day offs yet.</p>';
-    return;
-  }
-  state.dayOffs.forEach(dayOff => {
-    const item = document.createElement('div');
-    item.className = 'dayoff-item';
-    const when = dayOff.is_recurring ? `Every ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dayOff.recurring_day_of_week]}` : dayOff.day_off_date;
-    item.innerHTML = `
-      <div class="dayoff-item-info">
-        <strong>${when}</strong>
-        <p>${dayOff.notes || 'No notes'}</p>
-      </div>
-    `;
-    elements.dayoffsList.appendChild(item);
-  });
 }
 
 function renderPhotoPreview() {
@@ -551,10 +603,9 @@ async function handleSaveProfile(event) {
     const bio = elements.profileBio.value.trim();
     const instagram = elements.profileInstagram.value.trim();
     const tiktok = elements.profileTiktok.value.trim();
-    const photoUrls = normalizePhotoUrls(elements.profilePhotos.value);
     const updated = await apiCall(`/barbers/${state.user.id}`, {
       method: 'PUT',
-      body: JSON.stringify({ bio, instagram, tiktok, photoUrls }),
+      body: JSON.stringify({ bio, instagram, tiktok }),
     });
     state.user = { ...state.user, ...updated };
     showToast('Profile updated.');
@@ -568,14 +619,11 @@ async function handleUploadPhotos() {
   if (!state.user) return;
   try {
     const uploadResult = await uploadPhotos();
-    const existing = normalizePhotoUrls(state.user.photo_urls);
-    const merged = [...existing, ...(uploadResult.uploaded || [])];
     const updated = await apiCall(`/barbers/${state.user.id}`, {
       method: 'PUT',
-      body: JSON.stringify({ photoUrls: merged }),
+      body: JSON.stringify({ photoUrls: uploadResult.uploaded || [] }),
     });
     state.user = { ...state.user, ...updated };
-    elements.profilePhotos.value = normalizePhotoUrls(updated.photo_urls).join(', ');
     elements.photoFiles.value = '';
     elements.photoPreview.innerHTML = '';
     showToast('Photos uploaded and profile updated.');
@@ -600,7 +648,7 @@ async function handleCreateBarber(event) {
     }
     await apiCall('/barbers', {
       method: 'POST',
-      body: JSON.stringify({ name, email, password, role, bio, instagram, tiktok, photoUrls: [] }),
+      body: JSON.stringify({ name, email, password, role, bio, instagram, tiktok }),
     });
     elements.createBarberForm.reset();
     showToast('New staff account created.');
@@ -663,11 +711,8 @@ async function refreshDayOffs() {
 async function refreshAll() {
   await Promise.all([refreshAppointments(), refreshBarbers(), refreshDayOffs()]);
   renderProfileForm();
-  // Show team tab only for boss and senior_barber
-  if (state.user.role === 'boss' || state.user.role === 'senior_barber') {
+  if (state.user.role === 'boss') {
     document.querySelectorAll('.boss-only').forEach(el => el.classList.remove('hidden'));
-  } else {
-    document.querySelectorAll('.boss-only').forEach(el => el.classList.add('hidden'));
   }
 }
 
