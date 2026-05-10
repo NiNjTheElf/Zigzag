@@ -49,6 +49,7 @@ const ensureSchema = async () => {
         ADD COLUMN IF NOT EXISTS bio TEXT,
         ADD COLUMN IF NOT EXISTS instagram VARCHAR(255),
         ADD COLUMN IF NOT EXISTS tiktok VARCHAR(255),
+        ADD COLUMN IF NOT EXISTS profile_photo_url TEXT,
         ADD COLUMN IF NOT EXISTS photo_urls TEXT[],
         ADD COLUMN IF NOT EXISTS services TEXT,
         ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
@@ -61,8 +62,13 @@ const ensureSchema = async () => {
         ADD COLUMN IF NOT EXISTS client_phone VARCHAR(20),
         ADD COLUMN IF NOT EXISTS appointment_date DATE,
         ADD COLUMN IF NOT EXISTS appointment_time VARCHAR(10),
-        ADD COLUMN IF NOT EXISTS service_type VARCHAR(50),
+        ADD COLUMN IF NOT EXISTS service_type VARCHAR(255),
         ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+    `);
+
+    await client.query(`
+      ALTER TABLE appointments
+        ALTER COLUMN service_type TYPE VARCHAR(255);
     `);
 
     await client.query(`
@@ -122,7 +128,7 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     const token = jwt.sign({ id: user.id, email: user.email, role: user.role, name: user.name }, JWT_SECRET, { expiresIn: '7d' });
-    res.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role, bio: user.bio, instagram: user.instagram, tiktok: user.tiktok, photo_urls: user.photo_urls, services: user.services } });
+    res.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role, bio: user.bio, instagram: user.instagram, tiktok: user.tiktok, profile_photo_url: user.profile_photo_url, photo_urls: user.photo_urls, services: user.services } });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Login failed' });
@@ -132,7 +138,7 @@ app.post('/api/auth/login', async (req, res) => {
 app.get('/api/auth/me', authenticateToken, async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT id, name, email, role, bio, instagram, tiktok, photo_urls, services FROM users WHERE id = $1',
+      'SELECT id, name, email, role, bio, instagram, tiktok, profile_photo_url, photo_urls, services FROM users WHERE id = $1',
       [req.user.id]
     );
     if (!result.rows.length) {
@@ -150,7 +156,7 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
 app.get('/api/barbers', async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT id, name, role, bio, instagram, tiktok, photo_urls, services FROM users WHERE role <> 'boss' ORDER BY role DESC, name ASC`
+      `SELECT id, name, role, bio, instagram, tiktok, profile_photo_url, photo_urls, services FROM users WHERE role <> 'boss' ORDER BY role DESC, name ASC`
     );
     res.json(result.rows);
   } catch (error) {
@@ -165,15 +171,15 @@ app.post('/api/barbers', authenticateToken, async (req, res) => {
     return res.status(403).json({ error: 'Only boss and senior barber can create staff accounts' });
   }
 
-  const { name, email, password, role, bio, instagram, tiktok, photoUrls, services } = req.body;
+  const { name, email, password, role, bio, instagram, tiktok, profilePhotoUrl, photoUrls, services } = req.body;
   const validRoles = ['boss', 'senior_barber', 'barber', 'junior_barber'];
   const normalizedRole = validRoles.includes(role) ? role : 'barber';
 
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
     const result = await pool.query(
-      'INSERT INTO users (name, email, password, role, bio, instagram, tiktok, photo_urls, services) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id, name, email, role, bio, instagram, tiktok, photo_urls, services',
-      [name, email.toLowerCase(), hashedPassword, normalizedRole, bio || null, instagram || null, tiktok || null, photoUrls || null, services || null]
+      'INSERT INTO users (name, email, password, role, bio, instagram, tiktok, profile_photo_url, photo_urls, services) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id, name, email, role, bio, instagram, tiktok, profile_photo_url, photo_urls, services',
+      [name, email.toLowerCase(), hashedPassword, normalizedRole, bio || null, instagram || null, tiktok || null, profilePhotoUrl || null, photoUrls || null, services || null]
     );
     res.status(201).json(result.rows[0]);
   } catch (error) {
@@ -191,9 +197,9 @@ app.put('/api/barbers/:id', authenticateToken, async (req, res) => {
     return res.status(400).json({ error: 'Invalid barber ID' });
   }
 
-  const { bio, instagram, tiktok, photoUrls, services, role } = req.body;
+  const { bio, instagram, tiktok, profilePhotoUrl, photoUrls, services, role } = req.body;
   try {
-    const existingResult = await pool.query('SELECT role, bio, instagram, tiktok, photo_urls, services FROM users WHERE id = $1', [barberId]);
+    const existingResult = await pool.query('SELECT role, bio, instagram, tiktok, profile_photo_url, photo_urls, services FROM users WHERE id = $1', [barberId]);
     if (existingResult.rows.length === 0) {
       return res.status(404).json({ error: 'Barber not found' });
     }
@@ -228,12 +234,13 @@ app.put('/api/barbers/:id', authenticateToken, async (req, res) => {
     const updatedBio = bio !== undefined ? bio : existing.bio;
     const updatedInstagram = instagram !== undefined ? instagram : existing.instagram;
     const updatedTiktok = tiktok !== undefined ? tiktok : existing.tiktok;
+    const updatedProfilePhotoUrl = profilePhotoUrl !== undefined ? profilePhotoUrl : existing.profile_photo_url;
     const updatedPhotoUrls = photoUrls !== undefined ? photoUrls : existing.photo_urls;
     const updatedServices = services !== undefined ? services : existing.services;
 
     const result = await pool.query(
-      'UPDATE users SET bio = $1, instagram = $2, tiktok = $3, photo_urls = $4, services = $5, role = $6 WHERE id = $7 RETURNING id, name, email, role, bio, instagram, tiktok, photo_urls, services',
-      [updatedBio || null, updatedInstagram || null, updatedTiktok || null, updatedPhotoUrls || null, updatedServices || null, desiredRole, barberId]
+      'UPDATE users SET bio = $1, instagram = $2, tiktok = $3, profile_photo_url = $4, photo_urls = $5, services = $6, role = $7 WHERE id = $8 RETURNING id, name, email, role, bio, instagram, tiktok, profile_photo_url, photo_urls, services',
+      [updatedBio || null, updatedInstagram || null, updatedTiktok || null, updatedProfilePhotoUrl || null, updatedPhotoUrls || null, updatedServices || null, desiredRole, barberId]
     );
     res.json(result.rows[0]);
   } catch (error) {
@@ -293,16 +300,12 @@ const normalizeAppointmentRecord = (row) => ({
 app.get('/api/appointments', authenticateToken, async (req, res) => {
   const { date, barberId } = req.query;
   try {
-    if (req.user.role === 'senior_barber') {
-      return res.json([]);
-    }
-
     let query = 'SELECT * FROM appointments';
     const params = [];
     const conditions = [];
 
     // Non-boss users only see their own appointments
-    if (req.user.role !== 'boss') {
+    if (req.user.role !== 'boss' && req.user.role !== 'senior_barber') {
       conditions.push('barber_id = $' + (params.length + 1));
       params.push(req.user.id);
     } else if (barberId) {
@@ -332,17 +335,13 @@ app.get('/api/appointments/month/:year/:month', authenticateToken, async (req, r
   const { year, month } = req.params;
   const { barberId } = req.query;
   try {
-    if (req.user.role === 'senior_barber') {
-      return res.json([]);
-    }
-
     const startDate = new Date(year, month - 1, 1).toISOString().split('T')[0];
     const endDate = new Date(year, month, 0).toISOString().split('T')[0];
 
     let query = 'SELECT * FROM appointments WHERE appointment_date BETWEEN $1 AND $2';
     const params = [startDate, endDate];
 
-    if (req.user.role !== 'boss') {
+    if (req.user.role !== 'boss' && req.user.role !== 'senior_barber') {
       query += ' AND barber_id = $3';
       params.push(req.user.id);
     } else if (barberId) {
@@ -575,7 +574,7 @@ app.get('/api/dayoffs', authenticateToken, async (req, res) => {
     let query = 'SELECT * FROM day_offs WHERE 1=1';
     const params = [];
 
-    if (req.user.role === 'barber') {
+    if (req.user.role !== 'boss' && req.user.role !== 'senior_barber') {
       query += ' AND barber_id = $' + (params.length + 1);
       params.push(req.user.id);
     } else if (barberId) {
@@ -640,10 +639,10 @@ app.delete('/api/dayoffs/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
 
   try {
-    const query = req.user.role === 'boss'
+    const query = (req.user.role === 'boss' || req.user.role === 'senior_barber')
       ? 'DELETE FROM day_offs WHERE id = $1 RETURNING id'
       : 'DELETE FROM day_offs WHERE id = $1 AND barber_id = $2 RETURNING id';
-    const params = req.user.role === 'boss'
+    const params = (req.user.role === 'boss' || req.user.role === 'senior_barber')
       ? [parseInt(id)]
       : [parseInt(id), req.user.id];
 

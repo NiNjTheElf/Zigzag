@@ -11,15 +11,26 @@
   <div class="page-shell">
     <header class="site-header">
       <a class="brand" href="index.html">ZigZag Hairplace</a>
+      <nav class="site-nav" aria-label="Main navigation">
+        <a href="index.html#studio">Studio</a>
+        <a href="index.html#barbers">Barbers</a>
+        <a href="index.html#contact">Contact</a>
+      </nav>
     </header>
 
     <main>
-      <section class="section about-section">
+      <section class="section about-section subpage-hero">
         <div class="section-heading">
-          <p class="eyebrow">Booking page</p>
-          <h2>Choose a barber, view their work, and reserve a time.</h2>
+          <p class="eyebrow">Booking</p>
+          <h2>Pick a barber. Pick a time.</h2>
+          <p>Quick, simple, no extra noise.</p>
         </div>
+        <div class="subpage-visual">
+          <img src="assets/zigzag-interior.avif" alt="ZigZag Hairplace barber stations" />
+        </div>
+      </section>
 
+      <section class="section about-section">
         <div class="barber-profile-grid" id="booking-barber-grid"></div>
 
         <div class="booking-card">
@@ -42,6 +53,7 @@
                 </select>
               </div>
             </div>
+            <div id="booking-service-options" class="booking-service-options"></div>
             <div class="form-row">
               <div class="form-group half-width">
                 <label for="booking-time">Selected time</label>
@@ -60,19 +72,19 @@
               </div>
             </div>
             <button class="btn btn-primary" type="submit">Book Appointment</button>
-            <p class="form-note">Barber photos are shown below and available slots update live.</p>
+            <p class="form-note">Slots update live.</p>
           </form>
         </div>
 
         <div class="booking-card">
-          <h3>Selected stylist gallery</h3>
+          <h3>Gallery</h3>
           <div id="barber-gallery" class="location-gallery"></div>
         </div>
       </section>
     </main>
 
     <footer class="site-footer">
-      <p>© 2026 ZigZag Hairplace — Reserve the perfect appointment.</p>
+      <p>&copy; 2026 ZigZag Hairplace</p>
     </footer>
   </div>
   <div id="booking-toast" class="toast hidden"></div>

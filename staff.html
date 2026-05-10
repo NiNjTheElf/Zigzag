@@ -11,13 +11,26 @@
   <div class="page-shell">
     <header class="site-header">
       <a class="brand" href="index.html">ZigZag Hairplace</a>
+      <nav class="site-nav" aria-label="Main navigation">
+        <a href="index.html#studio">Studio</a>
+        <a href="index.html#barbers">Barbers</a>
+        <a href="booking.html">Booking</a>
+      </nav>
     </header>
 
     <main>
-      <section class="section about-section">
+      <section class="section about-section subpage-hero">
         <div class="section-heading">
-          <p class="eyebrow">Staff Portal</p>
+          <p class="eyebrow">Staff</p>
+          <h2>Manage the shop.</h2>
+          <p>Appointments, photos, services, days off.</p>
         </div>
+        <div class="subpage-visual">
+          <img src="assets/zigzag-interior.avif" alt="ZigZag Hairplace interior mirrors and barber chairs" />
+        </div>
+      </section>
+
+      <section class="section about-section">
         <div id="login-section" class="booking-card">
           <h3>Staff login</h3>
           <form id="staff-login-form" class="booking-form">
@@ -30,7 +43,7 @@
               <input id="staff-password" type="password" placeholder="Password" required />
             </div>
             <button class="btn btn-primary" type="submit">Sign in</button>
-            <p class="form-note">Boss and barber accounts can access schedules, create team accounts, and upload barber photos.</p>
+            <p class="form-note">Schedules, team accounts, photos.</p>
           </form>
         </div>
 
@@ -49,6 +62,7 @@
             <button class="tab-button active" data-tab="appointments">Appointments</button>
             <button class="tab-button" data-tab="dayoffs">Day Offs</button>
             <button class="tab-button" data-tab="profile">Profile</button>
+            <button class="tab-button" data-tab="services">Services</button>
             <button class="tab-button boss-only hidden" data-tab="team">Team</button>
           </div>
 
@@ -91,17 +105,29 @@
                   </div>
                 </div>
                 <div class="form-group">
-                  <label>Services</label>
-                  <div id="service-cards" class="service-card-grid"></div>
+                  <label>Profile photo</label>
+                  <div id="profile-photo-preview" class="photo-preview-grid"></div>
+                  <input id="profile-photo-file" type="file" accept="image/*" />
                 </div>
                 <div class="form-group">
-                  <label>Current barber photos</label>
-                  <div id="current-photo-preview" class="photo-preview-grid"></div>
+                  <label>Work photos</label>
+                  <div id="current-work-photo-preview" class="photo-preview-grid"></div>
+                </div>
+                <div class="form-group">
+                  <label for="work-photo-files">Add work photos</label>
+                  <input id="work-photo-files" type="file" accept="image/*" multiple />
+                  <div id="work-photo-preview" class="booking-calendar-panel"></div>
                 </div>
                 <button class="btn btn-primary" type="submit">Save profile</button>
               </form>
             </div>
+          </section>
 
+          <section id="services-tab" class="tab-panel hidden">
+            <div class="booking-card">
+              <h3>Your services</h3>
+              <div id="service-cards" class="service-card-grid"></div>
+            </div>
             <div class="booking-card service-form-card">
               <h4>Add or edit a service</h4>
               <form id="service-form" class="booking-form">
@@ -110,21 +136,12 @@
                   <input id="service-name" type="text" placeholder="Haircut + Beard" required />
                 </div>
                 <div class="form-group">
-                  <label for="service-photo-url">Service photo URL</label>
-                  <input id="service-photo-url" type="text" placeholder="https://example.com/photo.jpg" />
+                  <label for="service-photo-file">Service photo</label>
+                  <input id="service-photo-file" type="file" accept="image/*" />
+                  <div id="service-photo-preview" class="booking-calendar-panel"></div>
                 </div>
                 <button class="btn btn-primary" type="submit">Save service</button>
               </form>
-            </div>
-
-            <div class="booking-card">
-              <h3>Upload photos</h3>
-              <div class="form-group">
-                <label for="photo-files">Choose images from your device</label>
-                <input id="photo-files" type="file" accept="image/*" multiple />
-              </div>
-              <div id="photo-preview" class="booking-calendar-panel"></div>
-              <button id="upload-photos-button" class="btn btn-primary" type="button">Upload selected photos</button>
             </div>
           </section>
 
@@ -219,7 +236,7 @@
     </main>
 
     <footer class="site-footer">
-      <p>© 2026 ZigZag Hairplace — Staff portal for bookings and barber galleries.</p>
+      <p>&copy; 2026 ZigZag Hairplace</p>
     </footer>
   </div>
   <div id="staff-toast" class="toast hidden"></div>

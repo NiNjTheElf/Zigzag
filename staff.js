@@ -37,14 +37,16 @@ const elements = {
   profileBio: document.getElementById('profile-bio'),
   profileInstagram: document.getElementById('profile-instagram'),
   profileTiktok: document.getElementById('profile-tiktok'),
-  photoFiles: document.getElementById('photo-files'),
-  photoPreview: document.getElementById('photo-preview'),
-  currentPhotoPreview: document.getElementById('current-photo-preview'),
+  profilePhotoFile: document.getElementById('profile-photo-file'),
+  profilePhotoPreview: document.getElementById('profile-photo-preview'),
+  workPhotoFiles: document.getElementById('work-photo-files'),
+  workPhotoPreview: document.getElementById('work-photo-preview'),
+  currentWorkPhotoPreview: document.getElementById('current-work-photo-preview'),
   serviceCards: document.getElementById('service-cards'),
   serviceForm: document.getElementById('service-form'),
   serviceName: document.getElementById('service-name'),
-  servicePhotoUrl: document.getElementById('service-photo-url'),
-  uploadPhotosButton: document.getElementById('upload-photos-button'),
+  servicePhotoFile: document.getElementById('service-photo-file'),
+  servicePhotoPreview: document.getElementById('service-photo-preview'),
   createBarberForm: document.getElementById('create-barber-form'),
   newBarberName: document.getElementById('new-barber-name'),
   newBarberEmail: document.getElementById('new-barber-email'),
@@ -120,7 +122,7 @@ function createModal(htmlContent) {
   modal.className = 'modal';
   modal.innerHTML = `
     <div class="modal-panel">
-      <button class="close-btn" type="button">×</button>
+      <button class="close-btn" type="button">&times;</button>
       <div class="modal-content" style="padding: 24px; overflow-y: auto; width: 100%;">
         ${htmlContent}
       </div>
@@ -138,7 +140,7 @@ function createModal(htmlContent) {
 async function openRescheduleModal(appointment) {
   const barber = state.barbers.find(b => b.id === appointment.barber_id);
   const barberName = barber ? barber.name : `Barber #${appointment.barber_id}`;
-  let selectedDate = appointment.appointment_date;
+  let selectedDate = normalizeDateKey(appointment.appointment_date);
   let selectedTime = '';
 
   function renderSlots(availableTimes, isDayOff) {
@@ -181,11 +183,11 @@ async function openRescheduleModal(appointment) {
     <p><strong>Client:</strong> ${appointment.client_name}</p>
     <p><strong>Phone:</strong> ${appointment.client_phone}</p>
     <p><strong>Barber:</strong> ${barberName}</p>
-    <p><strong>Current:</strong> ${appointment.appointment_date} at ${appointment.appointment_time}</p>
+    <p><strong>Current:</strong> ${normalizeDateKey(appointment.appointment_date)} at ${appointment.appointment_time}</p>
     <div style="margin-top: 20px; display: grid; gap: 16px;">
       <div>
         <label for="reschedule-date">New date</label>
-        <input id="reschedule-date" type="date" value="${appointment.appointment_date}" style="width:100%; padding: 12px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.18); background: #0b090c; color: #fff;" />
+        <input id="reschedule-date" type="date" value="${selectedDate}" style="width:100%; padding: 12px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.18); background: #0b090c; color: #fff;" />
       </div>
       <div>
         <label>Available times</label>
@@ -300,6 +302,55 @@ function serializeServiceList(list) {
   return JSON.stringify(list.map(service => ({ name: service.name || '', photoUrl: service.photoUrl || '' })));
 }
 
+function normalizeDateKey(rawDate) {
+  if (!rawDate) return '';
+  if (typeof rawDate === 'string') return rawDate.split('T')[0];
+  return formatDateForInput(new Date(rawDate));
+}
+
+function getProfilePhotoUrl(user) {
+  if (!user) return '';
+  return user.profile_photo_url || normalizePhotoUrls(user.photo_urls)[0] || '';
+}
+
+function renderImagePreview(container, urls, emptyText, removable = false, onRemove = null) {
+  if (!container) return;
+  container.innerHTML = '';
+  const cleanUrls = normalizePhotoUrls(urls);
+  if (!cleanUrls.length) {
+    container.innerHTML = `<p>${emptyText}</p>`;
+    return;
+  }
+
+  cleanUrls.forEach((url, index) => {
+    const card = document.createElement('div');
+    card.className = 'editable-photo-card';
+
+    const img = document.createElement('img');
+    img.src = url;
+    img.alt = `Photo ${index + 1}`;
+
+    card.appendChild(img);
+
+    if (removable && onRemove) {
+      const removeButton = document.createElement('button');
+      removeButton.type = 'button';
+      removeButton.className = 'photo-remove-btn';
+      removeButton.textContent = '\u00d7';
+      removeButton.addEventListener('click', () => onRemove(index));
+      card.appendChild(removeButton);
+    }
+
+    container.appendChild(card);
+  });
+}
+
+function renderFilePreview(input, container, emptyText) {
+  if (!container || !input) return;
+  const urls = [...input.files].map(file => URL.createObjectURL(file));
+  renderImagePreview(container, urls, emptyText);
+}
+
 function renderServiceCards() {
   if (!elements.serviceCards) return;
   elements.serviceCards.innerHTML = '';
@@ -353,42 +404,88 @@ function populateServiceForm(index) {
   const service = state.serviceList[index];
   if (!service) return;
   elements.serviceName.value = service.name;
-  elements.servicePhotoUrl.value = service.photoUrl || '';
+  elements.servicePhotoFile.value = '';
+  renderImagePreview(elements.servicePhotoPreview, service.photoUrl ? [service.photoUrl] : [], 'Choose a photo from your device.');
   elements.serviceForm.dataset.editIndex = String(index);
   elements.serviceForm.querySelector('button[type="submit"]').textContent = 'Update service';
 }
 
 function clearServiceForm() {
   elements.serviceName.value = '';
-  elements.servicePhotoUrl.value = '';
+  elements.servicePhotoFile.value = '';
+  if (elements.servicePhotoPreview) {
+    elements.servicePhotoPreview.innerHTML = 'Choose a photo from your device.';
+  }
   delete elements.serviceForm.dataset.editIndex;
   elements.serviceForm.querySelector('button[type="submit"]').textContent = 'Save service';
 }
 
-function deleteService(index) {
+async function deleteService(index) {
   state.serviceList.splice(index, 1);
-  renderServiceCards();
+  try {
+    await saveCurrentServices();
+    renderServiceCards();
+    showToast('Service deleted.');
+  } catch (error) {
+    showToast('Could not delete service: ' + error.message);
+  }
 }
 
-function addOrUpdateService(event) {
+async function uploadFiles(files) {
+  const fileList = [...files];
+  if (!fileList.length) return [];
+  const formData = new FormData();
+  fileList.forEach(file => formData.append('photos', file));
+  const response = await fetch(`${API_BASE}/upload`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${state.token}` },
+    body: formData,
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.error || 'Upload failed');
+  }
+  const data = await response.json();
+  return data.uploaded || [];
+}
+
+async function saveCurrentServices() {
+  const updated = await apiCall(`/barbers/${state.user.id}`, {
+    method: 'PUT',
+    body: JSON.stringify({ services: serializeServiceList(state.serviceList) }),
+  });
+  state.user = { ...state.user, ...updated };
+}
+
+async function addOrUpdateService(event) {
   event.preventDefault();
   const name = elements.serviceName.value.trim();
-  const photoUrl = elements.servicePhotoUrl.value.trim();
   if (!name) {
     showToast('Service name is required.');
     return;
   }
 
-  const existingIndex = Number(elements.serviceForm.dataset.editIndex);
-  const serviceData = { name, photoUrl };
-  if (!Number.isNaN(existingIndex) && existingIndex >= 0 && existingIndex < state.serviceList.length) {
-    state.serviceList[existingIndex] = serviceData;
-  } else {
-    state.serviceList.push(serviceData);
-  }
+  try {
+    const existingIndex = Number(elements.serviceForm.dataset.editIndex);
+    const existing = (!Number.isNaN(existingIndex) && existingIndex >= 0 && existingIndex < state.serviceList.length)
+      ? state.serviceList[existingIndex]
+      : null;
+    const uploaded = await uploadFiles(elements.servicePhotoFile.files);
+    const serviceData = { name, photoUrl: uploaded[0] || existing?.photoUrl || '' };
 
-  renderServiceCards();
-  clearServiceForm();
+    if (existing) {
+      state.serviceList[existingIndex] = serviceData;
+    } else {
+      state.serviceList.push(serviceData);
+    }
+
+    await saveCurrentServices();
+    renderServiceCards();
+    clearServiceForm();
+    showToast('Service saved.');
+  } catch (error) {
+    showToast('Service save failed: ' + error.message);
+  }
 }
 
 function formatDateForInput(date) {
@@ -450,8 +547,8 @@ async function fetchBarbers() {
 
 async function fetchAppointments() {
   const data = await apiCall('/appointments', { method: 'GET' });
-  // Filter to only this barber's appointments if not boss
-  if (state.user && state.user.role !== 'boss') {
+  // Regular barbers only see their own appointments. Boss/senior see the full shop.
+  if (state.user && state.user.role !== 'boss' && state.user.role !== 'senior_barber') {
     state.appointments = data.filter(appt => appt.barber_id === state.user.id);
   } else {
     state.appointments = data;
@@ -461,8 +558,8 @@ async function fetchAppointments() {
 
 async function fetchDayOffs() {
   const data = await apiCall('/dayoffs', { method: 'GET' });
-  // Filter to only this barber's dayoffs if not boss
-  if (state.user && state.user.role !== 'boss') {
+  // Regular barbers only see their own day-offs. Boss/senior see the full shop.
+  if (state.user && state.user.role !== 'boss' && state.user.role !== 'senior_barber') {
     state.dayOffs = data.filter(dayOff => dayOff.barber_id === state.user.id);
   } else {
     state.dayOffs = data;
@@ -490,73 +587,43 @@ function renderProfileForm() {
   elements.profileTiktok.value = state.user.tiktok || '';
   clearServiceForm();
   renderServiceCards();
-  renderCurrentPhotoPreview();
+  renderProfilePhotoPreview();
+  renderCurrentWorkPhotoPreview();
 }
 
-function renderCurrentPhotoPreview() {
-  if (!elements.currentPhotoPreview) return;
-  elements.currentPhotoPreview.innerHTML = '';
-  const urls = normalizePhotoUrls(state.user.photo_urls);
-  if (!urls.length) {
-    elements.currentPhotoPreview.innerHTML = '<p>No current photos saved yet.</p>';
-    return;
-  }
-
-  const grid = document.createElement('div');
-  grid.style.display = 'grid';
-  grid.style.gridTemplateColumns = 'repeat(auto-fit, minmax(120px, 1fr))';
-  grid.style.gap = '12px';
-
-  urls.forEach((url, index) => {
-    const card = document.createElement('div');
-    card.style.position = 'relative';
-    card.style.borderRadius = '18px';
-    card.style.overflow = 'hidden';
-    card.style.background = '#111';
-    card.style.minHeight = '110px';
-
-    const img = document.createElement('img');
-    img.src = url;
-    img.alt = `Photo ${index + 1}`;
-    img.style.width = '100%';
-    img.style.height = '110px';
-    img.style.objectFit = 'cover';
-
-    const removeButton = document.createElement('button');
-    removeButton.type = 'button';
-    removeButton.textContent = '×';
-    removeButton.style.position = 'absolute';
-    removeButton.style.top = '8px';
-    removeButton.style.right = '8px';
-    removeButton.style.width = '28px';
-    removeButton.style.height = '28px';
-    removeButton.style.border = 'none';
-    removeButton.style.borderRadius = '50%';
-    removeButton.style.background = 'rgba(0,0,0,0.6)';
-    removeButton.style.color = '#fff';
-    removeButton.style.cursor = 'pointer';
-
-    removeButton.addEventListener('click', async () => {
-      const updatedUrls = urls.filter((_, idx) => idx !== index);
-      try {
-        const updated = await apiCall(`/barbers/${state.user.id}`, {
-          method: 'PUT',
-          body: JSON.stringify({ photoUrls: updatedUrls, services: serializeServiceList(state.serviceList) }),
-        });
-        state.user = { ...state.user, ...updated };
-        renderCurrentPhotoPreview();
-        showToast('Photo removed.');
-      } catch (error) {
-        showToast('Could not remove photo: ' + error.message);
-      }
-    });
-
-    card.appendChild(img);
-    card.appendChild(removeButton);
-    grid.appendChild(card);
+function renderProfilePhotoPreview() {
+  const profileUrl = state.user?.profile_photo_url || '';
+  renderImagePreview(elements.profilePhotoPreview, profileUrl ? [profileUrl] : [], 'No profile photo yet.', Boolean(profileUrl), async () => {
+    try {
+      const updated = await apiCall(`/barbers/${state.user.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ profilePhotoUrl: null }),
+      });
+      state.user = { ...state.user, ...updated };
+      renderProfilePhotoPreview();
+      showToast('Profile photo deleted.');
+    } catch (error) {
+      showToast('Could not delete profile photo: ' + error.message);
+    }
   });
+}
 
-  elements.currentPhotoPreview.appendChild(grid);
+function renderCurrentWorkPhotoPreview() {
+  const urls = normalizePhotoUrls(state.user.photo_urls);
+  renderImagePreview(elements.currentWorkPhotoPreview, urls, 'No work photos yet.', true, async (index) => {
+    const updatedUrls = urls.filter((_, idx) => idx !== index);
+    try {
+      const updated = await apiCall(`/barbers/${state.user.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ photoUrls: updatedUrls }),
+      });
+      state.user = { ...state.user, ...updated };
+      renderCurrentWorkPhotoPreview();
+      showToast('Work photo deleted.');
+    } catch (error) {
+      showToast('Could not delete photo: ' + error.message);
+    }
+  });
 }
 
 function renderAppointmentsCalendar() {
@@ -572,9 +639,7 @@ function renderAppointmentsCalendar() {
   // Create appointment map for quick lookup
   const appointmentMap = {};
   state.appointments.forEach(appt => {
-    const dateKey = typeof appt.appointment_date === 'string'
-      ? appt.appointment_date.split('T')[0]
-      : formatDateForInput(new Date(appt.appointment_date));
+    const dateKey = normalizeDateKey(appt.appointment_date);
     if (!appointmentMap[dateKey]) {
       appointmentMap[dateKey] = [];
     }
@@ -815,7 +880,7 @@ function renderDayOffsCalendar() {
   // Create dayoff map for quick lookup
   const dayoffMap = {};
   state.dayOffs.forEach(dayOff => {
-    const dateKey = dayOff.day_off_date;
+    const dateKey = normalizeDateKey(dayOff.day_off_date);
     dayoffMap[dateKey] = dayOff;
   });
 
@@ -886,7 +951,7 @@ function selectDayOffDate(date) {
     elements.dayoffDate.value = formatIsoDateShort(dateKey);
   }
   
-  const appointmentsOnDate = state.appointments.filter(appt => appt.appointment_date.startsWith(dateKey));
+  const appointmentsOnDate = state.appointments.filter(appt => normalizeDateKey(appt.appointment_date) === dateKey);
   if (appointmentsOnDate.length > 0) {
     showToast(`Warning: ${appointmentsOnDate.length} appointment(s) on this date. You may need to cancel them manually.`);
   }
@@ -909,62 +974,41 @@ function renderDayOffs() {
         <strong>${when}</strong>
         <p>${dayOff.notes || 'No notes'}</p>
       </div>
+      <button class="dayoff-item-delete" type="button" data-id="${dayOff.id}">Delete</button>
     `;
     elements.dayoffsList.appendChild(item);
   });
+
+  elements.dayoffsList.querySelectorAll('.dayoff-item-delete').forEach(button => {
+    button.addEventListener('click', async () => {
+      if (!confirm('Delete this day off?')) return;
+      try {
+        await apiCall(`/dayoffs/${button.dataset.id}`, { method: 'DELETE' });
+        showToast('Day off deleted.');
+        await refreshDayOffs();
+      } catch (error) {
+        showToast('Could not delete day off: ' + error.message);
+      }
+    });
+  });
 }
 
-function renderPhotoPreview() {
-  elements.photoPreview.innerHTML = '';
-  const files = [...elements.photoFiles.files];
-  if (!files.length) {
-    elements.photoPreview.textContent = 'Choose images to preview before upload.';
-    return;
-  }
-  const grid = document.createElement('div');
-  grid.style.display = 'grid';
-  grid.style.gridTemplateColumns = 'repeat(auto-fit, minmax(110px, 1fr))';
-  grid.style.gap = '12px';
-  files.forEach(file => {
-    const card = document.createElement('div');
-    card.style.borderRadius = '18px';
-    card.style.overflow = 'hidden';
-    card.style.background = '#111';
-    const img = document.createElement('img');
-    img.src = URL.createObjectURL(file);
-    img.style.width = '100%';
-    img.style.height = '100px';
-    img.style.objectFit = 'cover';
-    const label = document.createElement('div');
-    label.style.color = '#eee';
-    label.style.fontSize = '0.85rem';
-    label.style.padding = '8px';
-    label.textContent = file.name;
-    card.appendChild(img);
-    card.appendChild(label);
-    grid.appendChild(card);
-  });
-  elements.photoPreview.appendChild(grid);
+function renderWorkPhotoFilePreview() {
+  renderFilePreview(elements.workPhotoFiles, elements.workPhotoPreview, 'Choose work photos to preview.');
 }
 
-async function uploadPhotos() {
-  const files = [...elements.photoFiles.files];
-  if (!files.length) {
-    showToast('Select files before uploading.');
-    return;
+function renderProfilePhotoFilePreview() {
+  if (elements.profilePhotoFile.files.length) {
+    renderFilePreview(elements.profilePhotoFile, elements.profilePhotoPreview, 'No profile photo yet.');
+  } else {
+    renderProfilePhotoPreview();
   }
-  const formData = new FormData();
-  files.forEach(file => formData.append('photos', file));
-  const response = await fetch(`${API_BASE}/upload`, {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${state.token}` },
-    body: formData,
-  });
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw new Error(body.error || 'Upload failed');
+}
+
+function renderServicePhotoFilePreview() {
+  if (elements.servicePhotoFile.files.length) {
+    renderFilePreview(elements.servicePhotoFile, elements.servicePhotoPreview, 'Choose a photo from your device.');
   }
-  return response.json();
 }
 
 async function handleLogin(event) {
@@ -994,36 +1038,22 @@ async function handleSaveProfile(event) {
     const bio = elements.profileBio.value.trim();
     const instagram = elements.profileInstagram.value.trim();
     const tiktok = elements.profileTiktok.value.trim();
-    const services = serializeServiceList(state.serviceList);
+    const profileUploads = await uploadFiles(elements.profilePhotoFile.files);
+    const workUploads = await uploadFiles(elements.workPhotoFiles.files);
+    const profilePhotoUrl = profileUploads[0] || state.user.profile_photo_url || null;
+    const photoUrls = [...normalizePhotoUrls(state.user.photo_urls), ...workUploads];
     const updated = await apiCall(`/barbers/${state.user.id}`, {
       method: 'PUT',
-      body: JSON.stringify({ bio, instagram, tiktok, services }),
+      body: JSON.stringify({ bio, instagram, tiktok, profilePhotoUrl, photoUrls }),
     });
     state.user = { ...state.user, ...updated };
+    elements.profilePhotoFile.value = '';
+    elements.workPhotoFiles.value = '';
+    elements.workPhotoPreview.innerHTML = '';
     showToast('Profile updated.');
     renderProfileForm();
   } catch (error) {
     showToast('Profile save failed: ' + error.message);
-  }
-}
-
-async function handleUploadPhotos() {
-  if (!state.user) return;
-  try {
-    const uploadResult = await uploadPhotos();
-    const existing = normalizePhotoUrls(state.user.photo_urls);
-    const merged = [...existing, ...(uploadResult.uploaded || [])];
-    const updated = await apiCall(`/barbers/${state.user.id}`, {
-      method: 'PUT',
-      body: JSON.stringify({ photoUrls: merged, services: serializeServiceList(state.serviceList) }),
-    });
-    state.user = { ...state.user, ...updated };
-    elements.photoFiles.value = '';
-    elements.photoPreview.innerHTML = '';
-    renderCurrentPhotoPreview();
-    showToast('Photos uploaded and profile updated.');
-  } catch (error) {
-    showToast('Upload failed: ' + error.message);
   }
 }
 
@@ -1092,7 +1122,7 @@ async function refreshAppointments() {
   await fetchAppointments();
   renderAppointmentsCalendar();
   if (state.selectedApptDate) {
-    const appointments = state.appointments.filter(appt => appt.appointment_date === state.selectedApptDate);
+    const appointments = state.appointments.filter(appt => normalizeDateKey(appt.appointment_date) === state.selectedApptDate);
     showDayAppointments(state.selectedApptDate, appointments);
   }
 }
@@ -1104,6 +1134,9 @@ async function refreshDayOffs() {
 }
 
 async function refreshAll() {
+  if (state.token) {
+    await fetchCurrentUser();
+  }
   const isSenior = state.user.role === 'senior_barber';
   const isBoss = state.user.role === 'boss';
   const teamTab = document.querySelector('[data-tab="team"]');
@@ -1145,8 +1178,9 @@ async function init() {
   elements.logoutButton.addEventListener('click', logout);
   elements.profileForm.addEventListener('submit', handleSaveProfile);
   elements.serviceForm.addEventListener('submit', addOrUpdateService);
-  elements.photoFiles.addEventListener('change', renderPhotoPreview);
-  elements.uploadPhotosButton.addEventListener('click', handleUploadPhotos);
+  elements.profilePhotoFile.addEventListener('change', renderProfilePhotoFilePreview);
+  elements.workPhotoFiles.addEventListener('change', renderWorkPhotoFilePreview);
+  elements.servicePhotoFile.addEventListener('change', renderServicePhotoFilePreview);
   elements.createBarberForm.addEventListener('submit', handleCreateBarber);
   elements.dayoffForm.addEventListener('submit', handleDayoffSubmit);
   elements.tabButtons.forEach(btn => btn.addEventListener('click', () => renderTab(btn.dataset.tab)));

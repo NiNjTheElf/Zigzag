@@ -6,6 +6,7 @@ const elements = {
   barberSelect: document.getElementById('booking-barber'),
   bookingDate: document.getElementById('booking-date'),
   bookingService: document.getElementById('booking-service'),
+  bookingServiceOptions: document.getElementById('booking-service-options'),
   bookingTime: document.getElementById('booking-time'),
   bookingSlots: document.getElementById('booking-slots'),
   bookingForm: document.getElementById('booking-form'),
@@ -62,6 +63,10 @@ function normalizePhotoUrls(photoData) {
   return [];
 }
 
+function getProfilePhotoUrl(barber) {
+  return barber.profile_photo_url || normalizePhotoUrls(barber.photo_urls)[0] || '';
+}
+
 async function fetchBarbers() {
   state.barbers = await apiCall('/barbers', { method: 'GET' });
   return state.barbers;
@@ -77,24 +82,21 @@ function renderBarberCards() {
       <div class="barber-profile-info">
         <strong>${barber.name}</strong>
         <p>${barber.bio || 'Experienced barber with available slots.'}</p>
-        ${barber.services ? `<p class="barber-services">${barber.services}</p>` : ''}
         <div class="barber-social-links"></div>
         <button class="btn btn-secondary">Select stylist</button>
       </div>
     `;
     const imageContainer = card.querySelector('.barber-profile-images');
-    const galleryUrls = normalizePhotoUrls(barber.photo_urls);
-    if (galleryUrls.length) {
-      galleryUrls.slice(0, 3).forEach(url => {
-        const img = document.createElement('img');
-        img.src = url;
-        img.alt = barber.name;
-        imageContainer.appendChild(img);
-      });
+    const profilePhoto = getProfilePhotoUrl(barber);
+    if (profilePhoto) {
+      const img = document.createElement('img');
+      img.src = profilePhoto;
+      img.alt = barber.name;
+      imageContainer.appendChild(img);
     } else {
       const placeholder = document.createElement('div');
       placeholder.className = 'barber-profile-placeholder';
-      placeholder.textContent = 'No photos yet';
+      placeholder.textContent = 'No profile photo yet';
       imageContainer.appendChild(placeholder);
     }
     const socials = card.querySelector('.barber-social-links');
@@ -197,14 +199,30 @@ function setSelectedBarber(id) {
 
 function populateServiceSelect(barberId) {
   elements.bookingService.innerHTML = '';
+  elements.bookingServiceOptions.innerHTML = '';
   const barber = state.barbers.find(b => String(b.id) === String(barberId));
   const services = barber ? parseBarberServices(barber.services) : [];
-  const options = services.length ? services.map(s => s.name) : ['Haircut', 'Beard', 'Haircut + Beard'];
-  options.forEach(service => {
+  const options = services.length ? services : [{ name: 'Haircut' }, { name: 'Beard' }, { name: 'Haircut + Beard' }];
+  options.forEach((service, index) => {
     const option = document.createElement('option');
-    option.value = service;
-    option.textContent = service;
+    option.value = service.name;
+    option.textContent = service.name;
     elements.bookingService.appendChild(option);
+
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = 'booking-service-option';
+    if (index === 0) card.classList.add('selected');
+    card.innerHTML = `
+      <span>${service.name}</span>
+      ${service.photoUrl ? `<img src="${service.photoUrl}" alt="${service.name}" />` : '<span class="service-option-empty">No photo</span>'}
+    `;
+    card.addEventListener('click', () => {
+      elements.bookingService.value = service.name;
+      elements.bookingServiceOptions.querySelectorAll('.booking-service-option').forEach(btn => btn.classList.remove('selected'));
+      card.classList.add('selected');
+    });
+    elements.bookingServiceOptions.appendChild(card);
   });
 }
 
@@ -277,6 +295,11 @@ function bindEvents() {
     renderAvailableSlots();
   });
   elements.bookingDate.addEventListener('change', renderAvailableSlots);
+  elements.bookingService.addEventListener('change', () => {
+    elements.bookingServiceOptions.querySelectorAll('.booking-service-option').forEach(button => {
+      button.classList.toggle('selected', button.querySelector('span')?.textContent === elements.bookingService.value);
+    });
+  });
   elements.bookingForm.addEventListener('submit', handleBookingSubmit);
 }
 

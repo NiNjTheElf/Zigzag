@@ -12,11 +12,13 @@ CREATE TABLE users (
   name VARCHAR(255) NOT NULL,
   email VARCHAR(255) UNIQUE NOT NULL,
   password VARCHAR(255) NOT NULL,
-  role VARCHAR(20) NOT NULL CHECK (role IN ('boss', 'barber')),
+  role VARCHAR(20) NOT NULL CHECK (role IN ('boss', 'senior_barber', 'barber', 'junior_barber')),
   bio TEXT,
   instagram VARCHAR(255),
   tiktok VARCHAR(255),
+  profile_photo_url TEXT,
   photo_urls TEXT[],
+  services TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -28,6 +30,7 @@ CREATE TABLE appointments (
   client_phone VARCHAR(20) NOT NULL,
   appointment_date DATE NOT NULL,
   appointment_time VARCHAR(10) NOT NULL,
+  service_type VARCHAR(255),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   UNIQUE(barber_id, appointment_date, appointment_time)
 );

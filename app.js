@@ -208,6 +208,29 @@ function normalizePhotoUrls(photoData) {
   return [];
 }
 
+function getProfilePhotoUrl(barber) {
+  return barber.profile_photo_url || normalizePhotoUrls(barber.photo_urls)[0] || '';
+}
+
+function parseServiceList(rawServices) {
+  if (!rawServices) return [];
+  if (Array.isArray(rawServices)) return rawServices.map(item => (typeof item === 'string' ? { name: item } : item));
+  if (typeof rawServices === 'string') {
+    const trimmed = rawServices.trim();
+    if (!trimmed) return [];
+    if (trimmed.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        return Array.isArray(parsed) ? parsed.map(item => (typeof item === 'string' ? { name: item } : item)) : [];
+      } catch {
+        return [];
+      }
+    }
+    return [{ name: trimmed }];
+  }
+  return [];
+}
+
 async function updateBarberProfile(barberId, data) {
   return await apiCall(`/barbers/${barberId}`, {
     method: 'PUT',
@@ -389,18 +412,16 @@ function renderBarberProfiles() {
 
     const imageGrid = document.createElement('div');
     imageGrid.className = 'barber-profile-images';
-    const urls = normalizePhotoUrls(barber.photo_urls);
-    if (urls.length) {
-      urls.slice(0, 3).forEach(url => {
-        const img = document.createElement('img');
-        img.src = url;
-        img.alt = `${barber.name} portfolio`;
-        imageGrid.appendChild(img);
-      });
+    const profilePhoto = getProfilePhotoUrl(barber);
+    if (profilePhoto) {
+      const img = document.createElement('img');
+      img.src = profilePhoto;
+      img.alt = `${barber.name} profile`;
+      imageGrid.appendChild(img);
     } else {
       const placeholder = document.createElement('div');
       placeholder.className = 'barber-profile-placeholder';
-      placeholder.textContent = 'Portfolio coming soon';
+      placeholder.textContent = 'Profile photo coming soon';
       imageGrid.appendChild(placeholder);
     }
 
@@ -412,7 +433,8 @@ function renderBarberProfiles() {
     bio.textContent = barber.bio || 'Expert stylist with years of experience.';
     const services = document.createElement('p');
     services.className = 'barber-services';
-    services.textContent = barber.services ? barber.services : '';
+    const serviceNames = parseServiceList(barber.services).map(service => service.name).filter(Boolean);
+    services.textContent = serviceNames.slice(0, 3).join(' / ');
     
     const reviews = document.createElement('div');
     reviews.className = 'barber-reviews';
@@ -441,7 +463,7 @@ function renderBarberProfiles() {
 
     content.appendChild(name);
     content.appendChild(bio);
-    if (barber.services) content.appendChild(services);
+    if (serviceNames.length) content.appendChild(services);
     content.appendChild(reviews);
     if (socials.children.length) content.appendChild(socials);
 
@@ -581,7 +603,7 @@ function showDayAppointments(dateKey, appointments) {
   panel.style.maxHeight = '600px';
 
   let html = `
-    <button class="close-btn" onclick="this.parentElement.parentElement.remove()">×</button>
+    <button class="close-btn" onclick="this.parentElement.parentElement.remove()">&times;</button>
     <h3>${formatDateDisplay(new Date(dateKey + 'T00:00:00'))}</h3>
   `;
 

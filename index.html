@@ -11,55 +11,91 @@
   <div class="page-shell">
     <header class="site-header">
       <a class="brand" href="#hero">ZigZag Hairplace</a>
-
-        <a id="open-login" class="btn btn-secondary" href="staff.html">Staff Login</a>
+      <nav class="site-nav" aria-label="Main navigation">
+        <a href="#studio">Studio</a>
+        <a href="#barbers">Barbers</a>
+        <a href="booking.html">Booking</a>
+        <a href="#contact">Contact</a>
+      </nav>
+      <div class="header-actions">
+        <a id="open-login" class="btn btn-secondary" href="staff.html">Staff</a>
       </div>
     </header>
     
     <main>
       <section id="hero" class="hero-section">
         <div class="hero-copy">
-          <p class="eyebrow">Luxury hair design in the city</p>
+          <p class="eyebrow">Riga barbershop</p>
           <h1>ZigZag Hairplace</h1>
-          <p>Master barbers creating stunning looks in a premium atmosphere.</p>
+          <p>Clean cuts, grey concrete mood, chill station lights.</p>
           <div class="hero-actions">
-            <a id="hero-book" class="btn btn-primary" href="booking.html">Reserve Your Spot</a>
-            <a id="hero-login" class="btn btn-black" href="staff.html">Staff Portal</a>
+            <a id="hero-book" class="btn btn-primary" href="booking.html">Book Now</a>
+            <a class="btn btn-black" href="#studio">See the Shop</a>
           </div>
           <div class="hero-highlights">
-            <div><strong>Elite Stylists</strong><span>Experienced barbers built for modern luxury.</span></div>
-            <div><strong>Flexible Booking</strong><span>See available appointments and book instantly.</span></div>
-            <div><strong>Owner & Barber Portal</strong><span>Manage appointments, barber calendars, and time off.</span></div>
+            <div><strong>Grey vibe</strong><span>Concrete, mirrors, soft light.</span></div>
+            <div><strong>Fresh fades</strong><span>Haircut, beard, full finish.</span></div>
+            <div><strong>Easy booking</strong><span>Pick a barber and time.</span></div>
           </div>
         </div>
         <div class="hero-image">
-          <div class="hero-card">
-            <p>Signature cut + hot towel shave</p>
-            <strong>From $55</strong>
+          <div class="hero-frame hero-photo-frame">
+            <img src="assets/zigzag-interior.avif" alt="Inside ZigZag Hairplace with barber chairs and mirrors" />
           </div>
-          <div class="hero-frame"></div>
+          <div class="hero-card">
+            <p>Inside ZigZag</p>
+            <strong>Light grey. Clean. Chill.</strong>
+          </div>
         </div>
       </section>
 
+      <section class="street-strip" aria-label="Studio details">
+        <div><span>01</span> Avotu iela 34</div>
+        <div><span>02</span> 11:00 AM - 8:00 PM</div>
+        <div><span>03</span> Book online</div>
+      </section>
 
+      <section id="studio" class="section studio-section">
+        <div class="section-heading">
+          <p class="eyebrow">Shop vibe</p>
+          <h2>Concrete outside. Clean inside.</h2>
+        </div>
+        <div class="studio-layout">
+          <figure class="studio-photo">
+            <img src="assets/zigzag-interior.avif" alt="ZigZag Hairplace interior with dark barber stations" />
+          </figure>
+          <div class="studio-copy">
+            <p>Grey walls, dark chairs, big mirrors, calm lights. Simple, sharp, and easy to trust.</p>
+            <a class="btn btn-primary" href="booking.html">Grab a Slot</a>
+          </div>
+        </div>
+      </section>
 
-      <section id="booking" class="section booking-section">
+      <section id="barbers" class="section booking-section">
         <div class="section-heading">
           <p class="eyebrow">Our barbers</p>
-          <h2>Meet our expert stylists and see their work.</h2>
+          <h2>Pick your barber.</h2>
         </div>
         <div id="barber-profiles" class="barber-profile-grid"></div>
       </section>
 
+      <section class="section booking-promo">
+        <div>
+          <p class="eyebrow">Fast booking</p>
+          <h2>Choose a time. Pull up.</h2>
+        </div>
+        <a class="btn btn-primary" href="booking.html">Open Booking</a>
+      </section>
+
       <section id="contact" class="section contact-section">
         <div class="section-heading">
-          <p class="eyebrow">Get in touch</p>
-          <h2>Visit ZigZag Hairplace or contact our team.</h2>
+          <p class="eyebrow">Find us</p>
+          <h2>Come through.</h2>
         </div>
         <div class="contact-grid">
           <div class="contact-box">
             <h3>Our Location</h3>
-            <p>Avotu iela 34, Latgales priekšpilsēta, Rīga, LV-1009</p>
+            <p>Avotu iela 34, Riga, LV-1009</p>
             <div class="location-map">
               <iframe
                 src="https://www.google.com/maps?q=Avotu+iela+34+Riga&output=embed"
@@ -71,20 +107,20 @@
           </div>
           <div class="contact-box">
             <h3>Opening times</h3>
-            <p>Monday<br />11:00 AM - 8:00 PM<br /><br />Tuesday<br />11:00 AM - 8:00 PM<br /><br />Wednesday<br />11:00 AM - 8:00 PM<br /><br />Thursday<br />11:00 AM - 8:00 PM<br /><br />Friday<br />11:00 AM - 8:00 PM<br /><br />Saturday<br />11:00 AM - 8:00 PM<br /><br />Sunday<br />11:00 AM - 8:00 PM</p>
+            <p>Monday<br />11:00 AM - 8:00 PM<br /><br />Tuesday<br />11:00 AM - 8:00 PM<br /><br />Wednesday<br />11:00 AM - 8:00 PM<br /><br />Thursday<br />11:00 AM - 8:00 PM<br /><br />Friday<br />11:00 AM - 8:00 PM<br /><br />Saturday<br />11:00 AM - 8:00 PM<br /><br />Sunday<br />11:00 AM - 8:00 PM</p>
           </div>
         </div>
       </section>
     </main>
 
     <footer class="site-footer">
-      <p>© 2026 ZigZag Hairplace — Modern grooming, precise booking, premium service.</p>
+      <p>&copy; 2026 ZigZag Hairplace &mdash; Modern grooming, precise booking, street-level style.</p>
     </footer>
   </div>
 
   <div id="login-modal" class="modal hidden" aria-hidden="true">
     <div class="modal-panel">
-      <button id="close-login" class="close-btn" aria-label="Close login panel">×</button>
+      <button id="close-login" class="close-btn" aria-label="Close login panel">&times;</button>
       <h2>Staff Login</h2>
       <form id="login-form" class="login-form">
         <div class="form-group">
@@ -103,7 +139,7 @@
 
   <div id="dashboard-modal" class="modal hidden" aria-hidden="true">
     <div class="dashboard-panel">
-      <button id="close-dashboard" class="close-btn">×</button>
+      <button id="close-dashboard" class="close-btn">&times;</button>
       <div class="dashboard-header-sticky">
         <div class="dashboard-title-block">
           <p class="eyebrow">Staff Dashboard</p>
@@ -116,10 +152,10 @@
 
       <div class="dashboard-content">
         <div class="tabs-nav">
-          <button class="tab-button active" data-tab="appointments">📅 Appointments</button>
-          <button class="tab-button" data-tab="dayoffs">🗓️ Day Offs</button>
-          <button class="tab-button" data-tab="profile">📝 Profile</button>
-          <button class="tab-button boss-only hidden" data-tab="barbers">👤 Barbers</button>
+          <button class="tab-button active" data-tab="appointments">Appointments</button>
+          <button class="tab-button" data-tab="dayoffs">Day Offs</button>
+          <button class="tab-button" data-tab="profile">Profile</button>
+          <button class="tab-button boss-only hidden" data-tab="barbers">Barbers</button>
         </div>
 
         <section id="appointments-tab" class="tab-panel active">
@@ -253,7 +289,7 @@
 
   <div id="gallery-modal" class="modal hidden" aria-hidden="true">
     <div class="modal-panel gallery-modal-panel">
-      <button id="close-gallery" class="close-btn" aria-label="Close gallery">×</button>
+      <button id="close-gallery" class="close-btn" aria-label="Close gallery">&times;</button>
       <h2 id="gallery-title">Barber Gallery</h2>
       <div id="gallery-content" class="gallery-content"></div>
     </div>
