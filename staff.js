@@ -1,4 +1,4 @@
-const API_BASE = '/api';
+const API_BASE = (window.location.protocol === 'file:' ? 'http://localhost:3000' : window.location.origin) + '/api';
 const STORAGE_KEY_TOKEN = 'zigzagStaffToken';
 
 const state = {
@@ -83,15 +83,159 @@ async function apiCall(endpoint, options = {}) {
     headers['Content-Type'] = 'application/json';
   }
   setAuthHeader(headers);
-  const response = await fetch(`${API_BASE}${endpoint}`, {
-    ...options,
-    headers,
-  });
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(error.error || 'Request failed');
+  try {
+    const response = await fetch(`${API_BASE}${endpoint}`, {
+      ...options,
+      headers,
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(async () => {
+        const text = await response.text().catch(() => 'Request failed');
+        return { error: text };
+      });
+      throw new Error(errorData.error || response.statusText || 'Request failed');
+    }
+    return response.json().catch(() => ({}));
+  } catch (error) {
+    if (error.message.includes('Failed to fetch')) {
+      throw new Error('Cannot reach backend API. Start the server through http://localhost:3000');
+    }
+    throw error;
   }
-  return response.json().catch(() => ({}));
+}
+
+async function getAvailableSlots(barberId, date) {
+  return await apiCall(`/appointments/available?barberId=${barberId}&date=${date}`, {
+    method: 'GET',
+  });
+}
+
+function createModal(htmlContent) {
+  const modal = document.createElement('div');
+  modal.className = 'modal';
+  modal.innerHTML = `
+    <div class="modal-panel">
+      <button class="close-btn" type="button">×</button>
+      <div class="modal-content" style="padding: 24px; overflow-y: auto; width: 100%;">
+        ${htmlContent}
+      </div>
+    </div>
+  `;
+  const closeButton = modal.querySelector('.close-btn');
+  closeButton.addEventListener('click', () => modal.remove());
+  modal.addEventListener('click', (event) => {
+    if (event.target === modal) modal.remove();
+  });
+  document.body.appendChild(modal);
+  return modal;
+}
+
+async function openRescheduleModal(appointment) {
+  const barber = state.barbers.find(b => b.id === appointment.barber_id);
+  const barberName = barber ? barber.name : `Barber #${appointment.barber_id}`;
+  let selectedDate = appointment.appointment_date;
+  let selectedTime = '';
+
+  function renderSlots(availableTimes, isDayOff) {
+    const slotsContainer = modal.querySelector('#reschedule-slots');
+    slotsContainer.innerHTML = '';
+
+    if (isDayOff) {
+      const message = document.createElement('div');
+      message.className = 'slot-message';
+      message.textContent = 'This barber is off on the selected date. Choose another date.';
+      slotsContainer.appendChild(message);
+      return;
+    }
+
+    if (!availableTimes.length) {
+      const message = document.createElement('div');
+      message.className = 'slot-message';
+      message.textContent = 'No available times for this date. Pick another date.';
+      slotsContainer.appendChild(message);
+      return;
+    }
+
+    availableTimes.forEach(time => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'btn btn-small';
+      button.style.margin = '4px 4px 0 0';
+      button.textContent = time;
+      button.addEventListener('click', () => {
+        selectedTime = time;
+        modal.querySelectorAll('#reschedule-slots button').forEach(btn => btn.classList.remove('selected'));
+        button.classList.add('selected');
+      });
+      slotsContainer.appendChild(button);
+    });
+  }
+
+  const html = `
+    <h2>Reschedule Appointment</h2>
+    <p><strong>Client:</strong> ${appointment.client_name}</p>
+    <p><strong>Phone:</strong> ${appointment.client_phone}</p>
+    <p><strong>Barber:</strong> ${barberName}</p>
+    <p><strong>Current:</strong> ${appointment.appointment_date} at ${appointment.appointment_time}</p>
+    <div style="margin-top: 20px; display: grid; gap: 16px;">
+      <div>
+        <label for="reschedule-date">New date</label>
+        <input id="reschedule-date" type="date" value="${appointment.appointment_date}" style="width:100%; padding: 12px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.18); background: #0b090c; color: #fff;" />
+      </div>
+      <div>
+        <label>Available times</label>
+        <div id="reschedule-slots" style="display:flex; flex-wrap:wrap; gap:8px; margin-top:12px;"></div>
+      </div>
+      <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
+        <button id="confirm-reschedule" class="btn btn-primary" type="button">Move appointment</button>
+        <button id="cancel-reschedule" class="btn btn-secondary" type="button">Cancel</button>
+      </div>
+    </div>
+  `;
+
+  const modal = createModal(html);
+  const dateInput = modal.querySelector('#reschedule-date');
+  const confirmButton = modal.querySelector('#confirm-reschedule');
+  const cancelButton = modal.querySelector('#cancel-reschedule');
+  const minDate = formatDateForInput(new Date());
+  dateInput.min = minDate;
+
+  async function loadSlots(dateValue) {
+    if (!dateValue) return;
+    try {
+      const { available, isDayOff } = await getAvailableSlots(appointment.barber_id, dateValue);
+      renderSlots(available, isDayOff);
+      selectedDate = dateValue;
+      selectedTime = '';
+    } catch (error) {
+      const slotsContainer = modal.querySelector('#reschedule-slots');
+      slotsContainer.innerHTML = `<div class="slot-message">Could not load slots: ${error.message}</div>`;
+    }
+  }
+
+  dateInput.addEventListener('change', () => loadSlots(dateInput.value));
+  cancelButton.addEventListener('click', () => modal.remove());
+
+  confirmButton.addEventListener('click', async () => {
+    if (!selectedDate || !selectedTime) {
+      showToast('Select a new date and available time.');
+      return;
+    }
+
+    try {
+      await apiCall(`/appointments/${appointment.id}/reschedule`, {
+        method: 'POST',
+        body: JSON.stringify({ date: selectedDate, time: selectedTime }),
+      });
+      showToast('Appointment moved successfully.');
+      modal.remove();
+      await refreshAppointments();
+    } catch (error) {
+      showToast('Could not reschedule: ' + error.message);
+    }
+  });
+
+  await loadSlots(selectedDate);
 }
 
 function saveSession(token, user) {
@@ -217,10 +361,13 @@ function renderAppointmentsCalendar() {
   // Create appointment map for quick lookup
   const appointmentMap = {};
   state.appointments.forEach(appt => {
-    if (!appointmentMap[appt.appointment_date]) {
-      appointmentMap[appt.appointment_date] = [];
+    const dateKey = typeof appt.appointment_date === 'string'
+      ? appt.appointment_date.split('T')[0]
+      : formatDateForInput(new Date(appt.appointment_date));
+    if (!appointmentMap[dateKey]) {
+      appointmentMap[dateKey] = [];
     }
-    appointmentMap[appt.appointment_date].push(appt);
+    appointmentMap[dateKey].push(appt);
   });
 
   // Clear calendar
@@ -305,19 +452,49 @@ function showDayAppointments(dateKey, appointments) {
   }
 
   appointments.forEach(appt => {
+    const barber = state.barbers.find(b => b.id === appt.barber_id);
+    const barberLabel = barber ? barber.name : `Barber #${appt.barber_id}`;
     const item = document.createElement('div');
     item.className = 'dayoff-item';
     item.innerHTML = `
       <div class="dayoff-item-info">
         <strong>${appt.client_name} • ${appt.appointment_time}</strong>
-        <p>${appt.client_phone}</p>
-        <button class="btn btn-small cancel-appointment" data-id="${appt.id}">Cancel</button>
+        <p class="phone-number" data-phone="${appt.client_phone}">${appt.client_phone}</p>
+        ${state.user && state.user.role === 'boss' ? `<p><strong>Barber:</strong> ${barberLabel}</p>` : ''}
+        <div class="dayoff-item-actions">
+          <button class="btn btn-small open-reschedule" data-id="${appt.id}">Reschedule</button>
+          <button class="btn btn-small cancel-appointment" data-id="${appt.id}">Cancel</button>
+        </div>
       </div>
     `;
     elements.dayAppointmentsList.appendChild(item);
   });
 
-  // Add event listeners for cancel buttons
+  // Add event listeners for phone number copying
+  document.querySelectorAll('.phone-number').forEach(phoneEl => {
+    phoneEl.addEventListener('click', () => {
+      navigator.clipboard.writeText(phoneEl.dataset.phone).then(() => {
+        showToast('Phone number copied to clipboard!');
+      }).catch(err => {
+        console.error('Failed to copy: ', err);
+        showToast('Failed to copy phone number.');
+      });
+    });
+  });
+
+  // Add event listeners for reschedule and cancel buttons
+  document.querySelectorAll('.open-reschedule').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const apptId = parseInt(e.target.dataset.id, 10);
+      const appointment = state.appointments.find(appt => appt.id === apptId);
+      if (!appointment) {
+        showToast('Appointment not found.');
+        return;
+      }
+      openRescheduleModal(appointment);
+    });
+  });
+
   document.querySelectorAll('.cancel-appointment').forEach(btn => {
     btn.addEventListener('click', async (e) => {
       const apptId = e.target.dataset.id;
@@ -342,13 +519,17 @@ function renderStaffList() {
     const card = document.createElement('div');
     card.className = 'staff-card';
     const info = document.createElement('div');
+    // Format role name
+    const roleLabel = barber.role === 'junior_barber' ? 'Junior Barber' : 
+                      barber.role === 'senior_barber' ? 'Senior Barber' : 
+                      barber.role === 'barber' ? 'Barber' : barber.role;
     info.innerHTML = `
       <strong>${barber.name}</strong>
       <span>${barber.email}</span>
     `;
     const details = document.createElement('div');
     details.style.textAlign = 'right';
-    details.innerHTML = `<span style="font-size:0.85rem;color:#c9c1b5;">${barber.role}</span>`;
+    details.innerHTML = `<span style="font-size:0.85rem;color:#c9c1b5;">${roleLabel}</span>`;
     card.appendChild(info);
     card.appendChild(details);
     elements.staffList.appendChild(card);
@@ -659,8 +840,11 @@ async function refreshDayOffs() {
 async function refreshAll() {
   await Promise.all([refreshAppointments(), refreshBarbers(), refreshDayOffs()]);
   renderProfileForm();
-  if (state.user.role === 'boss') {
+  // Show team tab only for boss and senior_barber
+  if (state.user.role === 'boss' || state.user.role === 'senior_barber') {
     document.querySelectorAll('.boss-only').forEach(el => el.classList.remove('hidden'));
+  } else {
+    document.querySelectorAll('.boss-only').forEach(el => el.classList.add('hidden'));
   }
 }
 

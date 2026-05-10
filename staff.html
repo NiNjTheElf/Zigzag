@@ -11,9 +11,6 @@
   <div class="page-shell">
     <header class="site-header">
       <a class="brand" href="index.html">ZigZag Hairplace</a>
-      <div class="header-actions">
-        <a href="index.html" class="btn btn-secondary">Back to site</a>
-      </div>
     </header>
 
     <main>
@@ -51,9 +48,9 @@
 
           <div class="tabs-nav">
             <button class="tab-button active" data-tab="appointments">Appointments</button>
+            <button class="tab-button" data-tab="dayoffs">Day Offs</button>
             <button class="tab-button" data-tab="profile">Profile</button>
             <button class="tab-button boss-only hidden" data-tab="team">Team</button>
-            <button class="tab-button boss-only hidden" data-tab="dayoffs">Day Offs</button>
           </div>
 
           <section id="appointments-tab" class="tab-panel active">
@@ -135,8 +132,9 @@
                   <div class="form-group half-width">
                     <label for="new-barber-role">Role</label>
                     <select id="new-barber-role">
+                      <option value="junior_barber">Junior Barber</option>
                       <option value="barber">Barber</option>
-                      <option value="boss">Boss</option>
+                      <option value="senior_barber">Senior Barber</option>
                     </select>
                   </div>
                 </div>

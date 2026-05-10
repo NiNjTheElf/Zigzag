@@ -1,4 +1,4 @@
-const API_BASE = '/api';
+const API_BASE = (window.location.protocol === 'file:' ? 'http://localhost:3000' : window.location.origin) + '/api';
 const STORAGE_KEY_TOKEN = 'zigzagAuthToken';
 const SLOT_TIMES = ['10:00 AM', '11:30 AM', '1:00 PM', '2:30 PM', '4:00 PM', '5:30 PM'];
 const DAYS_OF_WEEK = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -147,13 +147,16 @@ async function apiCall(endpoint, options = {}) {
     });
 
     if (!response.ok) {
-      const error = await response.json();
+      const error = await response.json().catch(() => ({}));
       throw new Error(error.error || 'Request failed');
     }
 
     return await response.json();
   } catch (error) {
     console.error('API Error:', error);
+    if (error.message.includes('Failed to fetch')) {
+      throw new Error('Cannot reach backend API. Start the server and open the page through http://localhost:3000');
+    }
     throw error;
   }
 }
@@ -449,10 +452,13 @@ function renderAppointmentCalendar() {
   // Create appointment map for quick lookup
   const appointmentMap = {};
   state.appointments.forEach(appt => {
-    if (!appointmentMap[appt.appointment_date]) {
-      appointmentMap[appt.appointment_date] = [];
+    const dateKey = typeof appt.appointment_date === 'string'
+      ? appt.appointment_date.split('T')[0]
+      : formatDateForInput(new Date(appt.appointment_date));
+    if (!appointmentMap[dateKey]) {
+      appointmentMap[dateKey] = [];
     }
-    appointmentMap[appt.appointment_date].push(appt);
+    appointmentMap[dateKey].push(appt);
   });
 
   // Clear calendar
@@ -690,8 +696,8 @@ function renderDayOffList() {
 
       item.appendChild(info);
 
-      // Allow deletion only for boss or the user who owns this day off
-      if (state.currentUser.role === 'boss' || dayOff.barber_id === state.currentUser.id) {
+      // Allow deletion only for boss, senior_barber, or the user who owns this day off
+      if (state.currentUser.role === 'boss' || state.currentUser.role === 'senior_barber' || dayOff.barber_id === state.currentUser.id) {
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'dayoff-item-delete';
         deleteBtn.textContent = 'Delete';
@@ -726,9 +732,9 @@ async function populateBarberSelects() {
     elements.bookingBarber.appendChild(option);
   });
 
-  // Day-off barber select (for boss)
+  // Day-off barber select (for boss and senior_barber)
   elements.dayoffBarber.innerHTML = '';
-  if (state.currentUser && state.currentUser.role === 'boss') {
+  if (state.currentUser && (state.currentUser.role === 'boss' || state.currentUser.role === 'senior_barber')) {
     elements.dayoffBarber.style.display = '';
     barbers.forEach(barber => {
       const option = document.createElement('option');
@@ -845,8 +851,8 @@ async function setupDashboard() {
   await refreshAppointments();
   await refreshDayOffs();
 
-  // Show boss section if boss
-  if (state.currentUser.role === 'boss') {
+  // Show boss section if boss or senior_barber
+  if (state.currentUser.role === 'boss' || state.currentUser.role === 'senior_barber') {
     const bossTabBtn = document.querySelector('[data-tab="barbers"]');
     bossTabBtn.classList.remove('hidden');
   } else {
@@ -905,7 +911,7 @@ async function handleDayoffSubmit(event) {
   const date = elements.dayoffDate.value;
   const isRecurring = elements.dayoffRecurring.checked;
   const notes = elements.dayoffNotes.value.trim();
-  const barberId = state.currentUser.role === 'boss' ? parseInt(elements.dayoffBarber.value) : state.currentUser.id;
+  const barberId = (state.currentUser.role === 'boss' || state.currentUser.role === 'senior_barber') ? parseInt(elements.dayoffBarber.value) : state.currentUser.id;
 
   if (!date) {
     showToast('Select a date to mark as day off.');

@@ -156,12 +156,15 @@ app.get('/api/barbers', async (req, res) => {
 });
 
 app.post('/api/barbers', authenticateToken, async (req, res) => {
-  if (req.user.role !== 'boss') {
-    return res.status(403).json({ error: 'Only boss can create staff accounts' });
+  // Allow boss and senior_barber to create staff accounts
+  if (req.user.role !== 'boss' && req.user.role !== 'senior_barber') {
+    return res.status(403).json({ error: 'Only boss and senior barber can create staff accounts' });
   }
 
   const { name, email, password, role, bio, instagram, tiktok, photoUrls } = req.body;
-  const normalizedRole = role === 'boss' ? 'boss' : 'barber';
+  // Validate and normalize role
+  const validRoles = ['boss', 'senior_barber', 'barber', 'junior_barber'];
+  const normalizedRole = validRoles.includes(role) ? role : 'barber';
 
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -234,6 +237,25 @@ app.delete('/api/barbers/:id', authenticateToken, async (req, res) => {
 
 // ==================== APPOINTMENT ROUTES ====================
 
+const parseDateString = (dateStr) => {
+  const [year, month, day] = (dateStr || '').split('-').map(Number);
+  return new Date(year, month - 1, day);
+};
+
+const formatDateOnly = (date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const normalizeAppointmentRecord = (row) => ({
+  ...row,
+  appointment_date: row.appointment_date instanceof Date
+    ? formatDateOnly(row.appointment_date)
+    : row.appointment_date,
+});
+
 app.get('/api/appointments', authenticateToken, async (req, res) => {
   const { date, barberId } = req.query;
   try {
@@ -241,7 +263,8 @@ app.get('/api/appointments', authenticateToken, async (req, res) => {
     const params = [];
     const conditions = [];
 
-    if (req.user.role === 'barber') {
+    // Non-boss/non-senior-barber users only see their own appointments
+    if (req.user.role !== 'boss' && req.user.role !== 'senior_barber') {
       conditions.push('barber_id = $' + (params.length + 1));
       params.push(req.user.id);
     } else if (barberId) {
@@ -260,7 +283,7 @@ app.get('/api/appointments', authenticateToken, async (req, res) => {
 
     query += ' ORDER BY appointment_date, appointment_time';
     const result = await pool.query(query, params);
-    res.json(result.rows);
+    res.json(result.rows.map(normalizeAppointmentRecord));
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to fetch appointments' });
@@ -277,7 +300,8 @@ app.get('/api/appointments/month/:year/:month', authenticateToken, async (req, r
     let query = 'SELECT * FROM appointments WHERE appointment_date BETWEEN $1 AND $2';
     const params = [startDate, endDate];
 
-    if (req.user.role === 'barber') {
+    // Non-boss/non-senior-barber users only see their own appointments
+    if (req.user.role !== 'boss' && req.user.role !== 'senior_barber') {
       query += ' AND barber_id = $3';
       params.push(req.user.id);
     } else if (barberId) {
@@ -288,7 +312,7 @@ app.get('/api/appointments/month/:year/:month', authenticateToken, async (req, r
     query += ' ORDER BY appointment_date, appointment_time';
     const result = await pool.query(query, params);
     console.log(`Monthly appointments for ${req.user.role} ${req.user.id} in ${year}-${month}:`, result.rows.length, 'appointments');
-    res.json(result.rows);
+    res.json(result.rows.map(normalizeAppointmentRecord));
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to fetch appointments' });
@@ -308,7 +332,7 @@ app.get('/api/appointments/available', async (req, res) => {
     // Check day offs
     const dayOffResult = await pool.query(
       'SELECT * FROM day_offs WHERE barber_id = $1 AND (day_off_date = $2 OR (is_recurring = true AND recurring_day_of_week = $3))',
-      [parseInt(barberId), date, new Date(date).getDay()]
+      [parseInt(barberId), date, parseDateString(date).getDay()]
     );
 
     if (dayOffResult.rows.length > 0) {
@@ -329,7 +353,7 @@ app.post('/api/appointments', async (req, res) => {
     // Verify slot is still available
     const checkDayOff = await pool.query(
       'SELECT * FROM day_offs WHERE barber_id = $1 AND (day_off_date = $2 OR (is_recurring = true AND recurring_day_of_week = $3))',
-      [parseInt(barberId), date, new Date(date).getDay()]
+      [parseInt(barberId), date, parseDateString(date).getDay()]
     );
 
     if (checkDayOff.rows.length > 0) {
@@ -359,6 +383,139 @@ app.post('/api/appointments', async (req, res) => {
     }
     console.error(error);
     res.status(500).json({ error: 'Failed to create appointment' });
+  }
+});
+
+app.post('/api/appointments/:id/move-next-day', authenticateToken, async (req, res) => {
+  const appointmentId = parseInt(req.params.id);
+  if (isNaN(appointmentId)) {
+    return res.status(400).json({ error: 'Invalid appointment ID' });
+  }
+
+  try {
+    const appointmentResult = await pool.query(
+      'SELECT * FROM appointments WHERE id = $1',
+      [appointmentId]
+    );
+
+    if (appointmentResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Appointment not found' });
+    }
+
+    const appointment = appointmentResult.rows[0];
+    if (req.user.role !== 'boss' && req.user.role !== 'senior_barber' && appointment.barber_id !== req.user.id) {
+      return res.status(403).json({ error: 'Access denied to move this appointment' });
+    }
+
+    const currentDate = parseDateString(appointment.appointment_date);
+    currentDate.setDate(currentDate.getDate() + 1);
+    const nextDate = formatDateOnly(currentDate);
+
+    const dayOffResult = await pool.query(
+      'SELECT * FROM day_offs WHERE barber_id = $1 AND (day_off_date = $2 OR (is_recurring = true AND recurring_day_of_week = $3))',
+      [appointment.barber_id, nextDate, parseDateString(nextDate).getDay()]
+    );
+
+    if (dayOffResult.rows.length > 0) {
+      return res.status(400).json({ error: 'Barber is off on the next day' });
+    }
+
+    const bookedResult = await pool.query(
+      'SELECT id FROM appointments WHERE barber_id = $1 AND appointment_date = $2 AND appointment_time = $3',
+      [appointment.barber_id, nextDate, appointment.appointment_time]
+    );
+
+    if (bookedResult.rows.length > 0) {
+      return res.status(400).json({ error: 'The same time slot is already booked on the next day' });
+    }
+
+    const updateResult = await pool.query(
+      'UPDATE appointments SET appointment_date = $1 WHERE id = $2 RETURNING *',
+      [nextDate, appointmentId]
+    );
+
+    res.json(normalizeAppointmentRecord(updateResult.rows[0]));
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to move appointment' });
+  }
+});
+
+app.post('/api/appointments/:id/reschedule', authenticateToken, async (req, res) => {
+  const appointmentId = parseInt(req.params.id);
+  const { date, time } = req.body;
+
+  if (isNaN(appointmentId) || !date || !time) {
+    return res.status(400).json({ error: 'Appointment ID, date, and time are required' });
+  }
+
+  try {
+    const appointmentResult = await pool.query('SELECT * FROM appointments WHERE id = $1', [appointmentId]);
+    if (appointmentResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Appointment not found' });
+    }
+
+    const appointment = appointmentResult.rows[0];
+    if (req.user.role !== 'boss' && req.user.role !== 'senior_barber' && appointment.barber_id !== req.user.id) {
+      return res.status(403).json({ error: 'Access denied to reschedule this appointment' });
+    }
+
+    const dayOffResult = await pool.query(
+      'SELECT * FROM day_offs WHERE barber_id = $1 AND (day_off_date = $2 OR (is_recurring = true AND recurring_day_of_week = $3))',
+      [appointment.barber_id, date, parseDateString(date).getDay()]
+    );
+
+    if (dayOffResult.rows.length > 0) {
+      return res.status(400).json({ error: 'Barber is off on the selected date' });
+    }
+
+    const bookedResult = await pool.query(
+      'SELECT id FROM appointments WHERE barber_id = $1 AND appointment_date = $2 AND appointment_time = $3 AND id != $4',
+      [appointment.barber_id, date, time, appointmentId]
+    );
+
+    if (bookedResult.rows.length > 0) {
+      return res.status(400).json({ error: 'Selected slot is already booked' });
+    }
+
+    const updateResult = await pool.query(
+      'UPDATE appointments SET appointment_date = $1, appointment_time = $2 WHERE id = $3 RETURNING *',
+      [date, time, appointmentId]
+    );
+
+    res.json(normalizeAppointmentRecord(updateResult.rows[0]));
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to reschedule appointment' });
+  }
+});
+
+app.delete('/api/appointments/:id', authenticateToken, async (req, res) => {
+  const appointmentId = parseInt(req.params.id);
+  if (isNaN(appointmentId)) {
+    return res.status(400).json({ error: 'Invalid appointment ID' });
+  }
+
+  try {
+    const appointmentResult = await pool.query('SELECT barber_id FROM appointments WHERE id = $1', [appointmentId]);
+    if (appointmentResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Appointment not found' });
+    }
+
+    const appointment = appointmentResult.rows[0];
+    if (req.user.role !== 'boss' && req.user.role !== 'senior_barber' && appointment.barber_id !== req.user.id) {
+      return res.status(403).json({ error: 'Access denied to cancel this appointment' });
+    }
+
+    const deleteResult = await pool.query('DELETE FROM appointments WHERE id = $1 RETURNING id', [appointmentId]);
+    if (deleteResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Appointment not found' });
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to delete appointment' });
   }
 });
 
@@ -404,7 +561,7 @@ app.get('/api/dayoffs', authenticateToken, async (req, res) => {
 
 app.post('/api/dayoffs', authenticateToken, async (req, res) => {
   const { date, isRecurring, recurringDayOfWeek, notes } = req.body;
-  const barberId = req.user.role === 'boss' ? req.body.barberId : req.user.id;
+  const barberId = (req.user.role === 'boss' || req.user.role === 'senior_barber') ? req.body.barberId : req.user.id;
 
   try {
     const result = await pool.query(
