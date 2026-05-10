@@ -7,6 +7,7 @@ const state = {
   barbers: [],
   appointments: [],
   dayOffs: [],
+  serviceList: [],
   currentApptMonth: new Date(),
   currentDayoffMonth: new Date(),
   selectedApptDate: null,
@@ -36,9 +37,13 @@ const elements = {
   profileBio: document.getElementById('profile-bio'),
   profileInstagram: document.getElementById('profile-instagram'),
   profileTiktok: document.getElementById('profile-tiktok'),
-  profilePhotos: document.getElementById('profile-photos'),
   photoFiles: document.getElementById('photo-files'),
   photoPreview: document.getElementById('photo-preview'),
+  currentPhotoPreview: document.getElementById('current-photo-preview'),
+  serviceCards: document.getElementById('service-cards'),
+  serviceForm: document.getElementById('service-form'),
+  serviceName: document.getElementById('service-name'),
+  servicePhotoUrl: document.getElementById('service-photo-url'),
   uploadPhotosButton: document.getElementById('upload-photos-button'),
   createBarberForm: document.getElementById('create-barber-form'),
   newBarberName: document.getElementById('new-barber-name'),
@@ -262,11 +267,146 @@ function normalizePhotoUrls(photoData) {
   return [];
 }
 
+function parseServiceList(rawServices) {
+  if (!rawServices) return [];
+  if (Array.isArray(rawServices)) return rawServices;
+  if (typeof rawServices === 'string') {
+    const trimmed = rawServices.trim();
+    if (!trimmed) return [];
+    if (trimmed.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        // fall through to legacy parsing
+      }
+    }
+    const parts = trimmed.split(';').map(s => s.trim()).filter(Boolean);
+    const services = [];
+    parts.forEach(part => {
+      const [category, items] = part.split(':').map(s => s.trim());
+      if (!items) return;
+      items.split(',').map(item => item.trim()).filter(Boolean).forEach(item => {
+        services.push({ name: `${category} - ${item}`, photoUrl: '' });
+      });
+    });
+    if (services.length) return services;
+    return [{ name: trimmed, photoUrl: '' }];
+  }
+  return [];
+}
+
+function serializeServiceList(list) {
+  return JSON.stringify(list.map(service => ({ name: service.name || '', photoUrl: service.photoUrl || '' })));
+}
+
+function renderServiceCards() {
+  if (!elements.serviceCards) return;
+  elements.serviceCards.innerHTML = '';
+  if (!state.serviceList.length) {
+    elements.serviceCards.innerHTML = '<p class="service-empty">No services yet. Add one below.</p>';
+    return;
+  }
+
+  state.serviceList.forEach((service, index) => {
+    const card = document.createElement('div');
+    card.className = 'service-card';
+
+    const image = document.createElement('div');
+    image.className = 'service-card-image';
+    if (service.photoUrl) {
+      image.style.backgroundImage = `url('${service.photoUrl}')`;
+    } else {
+      image.textContent = 'No photo';
+      image.classList.add('service-card-empty');
+    }
+
+    const title = document.createElement('div');
+    title.className = 'service-card-name';
+    title.textContent = service.name || 'Untitled service';
+
+    const actions = document.createElement('div');
+    actions.className = 'service-card-actions';
+
+    const editButton = document.createElement('button');
+    editButton.type = 'button';
+    editButton.className = 'btn btn-small';
+    editButton.textContent = 'Edit';
+    editButton.addEventListener('click', () => populateServiceForm(index));
+
+    const deleteButton = document.createElement('button');
+    deleteButton.type = 'button';
+    deleteButton.className = 'btn btn-secondary btn-small';
+    deleteButton.textContent = 'Delete';
+    deleteButton.addEventListener('click', () => deleteService(index));
+
+    actions.appendChild(editButton);
+    actions.appendChild(deleteButton);
+    card.appendChild(image);
+    card.appendChild(title);
+    card.appendChild(actions);
+    elements.serviceCards.appendChild(card);
+  });
+}
+
+function populateServiceForm(index) {
+  const service = state.serviceList[index];
+  if (!service) return;
+  elements.serviceName.value = service.name;
+  elements.servicePhotoUrl.value = service.photoUrl || '';
+  elements.serviceForm.dataset.editIndex = String(index);
+  elements.serviceForm.querySelector('button[type="submit"]').textContent = 'Update service';
+}
+
+function clearServiceForm() {
+  elements.serviceName.value = '';
+  elements.servicePhotoUrl.value = '';
+  delete elements.serviceForm.dataset.editIndex;
+  elements.serviceForm.querySelector('button[type="submit"]').textContent = 'Save service';
+}
+
+function deleteService(index) {
+  state.serviceList.splice(index, 1);
+  renderServiceCards();
+}
+
+function addOrUpdateService(event) {
+  event.preventDefault();
+  const name = elements.serviceName.value.trim();
+  const photoUrl = elements.servicePhotoUrl.value.trim();
+  if (!name) {
+    showToast('Service name is required.');
+    return;
+  }
+
+  const existingIndex = Number(elements.serviceForm.dataset.editIndex);
+  const serviceData = { name, photoUrl };
+  if (!Number.isNaN(existingIndex) && existingIndex >= 0 && existingIndex < state.serviceList.length) {
+    state.serviceList[existingIndex] = serviceData;
+  } else {
+    state.serviceList.push(serviceData);
+  }
+
+  renderServiceCards();
+  clearServiceForm();
+}
+
 function formatDateForInput(date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+}
+
+function formatIsoDateShort(rawDate) {
+  const parsed = new Date(rawDate);
+  if (Number.isNaN(parsed.getTime())) {
+    return rawDate;
+  }
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, '0');
+  const day = String(parsed.getDate()).padStart(2, '0');
+  return `${year}.${month}.${day}`;
 }
 
 function formatDateDisplay(date) {
@@ -335,17 +475,88 @@ function renderTab(tabName) {
     btn.classList.toggle('active', btn.dataset.tab === tabName);
   });
   document.querySelectorAll('.tab-panel').forEach(panel => {
-    panel.classList.toggle('active', panel.id === `${tabName}-tab`);
+    const isActive = panel.id === `${tabName}-tab`;
+    panel.classList.toggle('active', isActive);
+    panel.classList.toggle('hidden', !isActive);
   });
 }
 
 function renderProfileForm() {
   if (!state.user) return;
+  state.serviceList = parseServiceList(state.user.services);
   elements.profileName.value = state.user.name;
   elements.profileBio.value = state.user.bio || '';
   elements.profileInstagram.value = state.user.instagram || '';
   elements.profileTiktok.value = state.user.tiktok || '';
-  elements.profilePhotos.value = normalizePhotoUrls(state.user.photo_urls).join(', ');
+  clearServiceForm();
+  renderServiceCards();
+  renderCurrentPhotoPreview();
+}
+
+function renderCurrentPhotoPreview() {
+  if (!elements.currentPhotoPreview) return;
+  elements.currentPhotoPreview.innerHTML = '';
+  const urls = normalizePhotoUrls(state.user.photo_urls);
+  if (!urls.length) {
+    elements.currentPhotoPreview.innerHTML = '<p>No current photos saved yet.</p>';
+    return;
+  }
+
+  const grid = document.createElement('div');
+  grid.style.display = 'grid';
+  grid.style.gridTemplateColumns = 'repeat(auto-fit, minmax(120px, 1fr))';
+  grid.style.gap = '12px';
+
+  urls.forEach((url, index) => {
+    const card = document.createElement('div');
+    card.style.position = 'relative';
+    card.style.borderRadius = '18px';
+    card.style.overflow = 'hidden';
+    card.style.background = '#111';
+    card.style.minHeight = '110px';
+
+    const img = document.createElement('img');
+    img.src = url;
+    img.alt = `Photo ${index + 1}`;
+    img.style.width = '100%';
+    img.style.height = '110px';
+    img.style.objectFit = 'cover';
+
+    const removeButton = document.createElement('button');
+    removeButton.type = 'button';
+    removeButton.textContent = '×';
+    removeButton.style.position = 'absolute';
+    removeButton.style.top = '8px';
+    removeButton.style.right = '8px';
+    removeButton.style.width = '28px';
+    removeButton.style.height = '28px';
+    removeButton.style.border = 'none';
+    removeButton.style.borderRadius = '50%';
+    removeButton.style.background = 'rgba(0,0,0,0.6)';
+    removeButton.style.color = '#fff';
+    removeButton.style.cursor = 'pointer';
+
+    removeButton.addEventListener('click', async () => {
+      const updatedUrls = urls.filter((_, idx) => idx !== index);
+      try {
+        const updated = await apiCall(`/barbers/${state.user.id}`, {
+          method: 'PUT',
+          body: JSON.stringify({ photoUrls: updatedUrls, services: serializeServiceList(state.serviceList) }),
+        });
+        state.user = { ...state.user, ...updated };
+        renderCurrentPhotoPreview();
+        showToast('Photo removed.');
+      } catch (error) {
+        showToast('Could not remove photo: ' + error.message);
+      }
+    });
+
+    card.appendChild(img);
+    card.appendChild(removeButton);
+    grid.appendChild(card);
+  });
+
+  elements.currentPhotoPreview.appendChild(grid);
 }
 
 function renderAppointmentsCalendar() {
@@ -444,7 +655,7 @@ function renderAppointmentsCalendar() {
 
 function showDayAppointments(dateKey, appointments) {
   state.selectedApptDate = dateKey;
-  elements.dayAppointmentsList.innerHTML = `<h4>Appointments for ${formatDateDisplay(new Date(dateKey + 'T00:00:00'))}</h4>`;
+  elements.dayAppointmentsList.innerHTML = `<h4>Appointments for ${formatIsoDateShort(dateKey)}</h4>`;
   
   if (!appointments.length) {
     elements.dayAppointmentsList.innerHTML += '<p>No appointments scheduled.</p>';
@@ -460,6 +671,7 @@ function showDayAppointments(dateKey, appointments) {
       <div class="dayoff-item-info">
         <strong>${appt.client_name} • ${appt.appointment_time}</strong>
         <p class="phone-number" data-phone="${appt.client_phone}">${appt.client_phone}</p>
+        ${appt.service_type ? `<p><strong>Service:</strong> ${appt.service_type}</p>` : ''}
         ${state.user && state.user.role === 'boss' ? `<p><strong>Barber:</strong> ${barberLabel}</p>` : ''}
         <div class="dayoff-item-actions">
           <button class="btn btn-small open-reschedule" data-id="${appt.id}">Reschedule</button>
@@ -532,6 +744,57 @@ function renderStaffList() {
     details.innerHTML = `<span style="font-size:0.85rem;color:#c9c1b5;">${roleLabel}</span>`;
     card.appendChild(info);
     card.appendChild(details);
+      const actionBar = document.createElement('div');
+    actionBar.className = 'staff-card-actions';
+    actionBar.style.display = 'flex';
+    actionBar.style.gap = '10px';
+    actionBar.style.alignItems = 'center';
+
+    const currentRole = document.createElement('span');
+    currentRole.style.fontSize = '0.85rem';
+    currentRole.style.color = '#c9c1b5';
+    currentRole.textContent = roleLabel;
+    actionBar.appendChild(currentRole);
+
+    const canManage = state.user && (state.user.role === 'boss' || state.user.role === 'senior_barber');
+    if (canManage && barber.id !== state.user.id) {
+      if (barber.role === 'junior_barber' && state.user.role === 'senior_barber') {
+        const promoteButton = document.createElement('button');
+        promoteButton.className = 'btn btn-small';
+        promoteButton.textContent = 'Make barber';
+        promoteButton.addEventListener('click', async () => {
+          try {
+            await apiCall(`/barbers/${barber.id}`, {
+              method: 'PUT',
+              body: JSON.stringify({ role: 'barber' }),
+            });
+            showToast(`${barber.name} is now a regular barber.`);
+            await refreshBarbers();
+          } catch (error) {
+            showToast('Unable to change role: ' + error.message);
+          }
+        });
+        actionBar.appendChild(promoteButton);
+      }
+      if (barber.role === 'barber' || barber.role === 'junior_barber') {
+        const deleteButton = document.createElement('button');
+        deleteButton.className = 'btn btn-secondary btn-small';
+        deleteButton.textContent = 'Fire';
+        deleteButton.addEventListener('click', async () => {
+          if (!confirm(`Fire ${barber.name}? This cannot be undone.`)) return;
+          try {
+            await apiCall(`/barbers/${barber.id}`, { method: 'DELETE' });
+            showToast(`${barber.name} has been removed.`);
+            await refreshBarbers();
+          } catch (error) {
+            showToast('Unable to fire staff: ' + error.message);
+          }
+        });
+        actionBar.appendChild(deleteButton);
+      }
+    }
+
+    card.appendChild(actionBar);
     elements.staffList.appendChild(card);
   });
   if (!state.barbers.length) {
@@ -619,10 +882,11 @@ function renderDayOffsCalendar() {
 function selectDayOffDate(date) {
   const dateKey = formatDateForInput(date);
   state.selectedDayoffDate = dateKey;
-  elements.dayoffDate.value = formatDateDisplay(new Date(dateKey + 'T00:00:00'));
+  if (elements.dayoffDate) {
+    elements.dayoffDate.value = formatIsoDateShort(dateKey);
+  }
   
-  // Check if there are appointments on this date
-  const appointmentsOnDate = state.appointments.filter(appt => appt.appointment_date === dateKey);
+  const appointmentsOnDate = state.appointments.filter(appt => appt.appointment_date.startsWith(dateKey));
   if (appointmentsOnDate.length > 0) {
     showToast(`Warning: ${appointmentsOnDate.length} appointment(s) on this date. You may need to cancel them manually.`);
   }
@@ -637,7 +901,9 @@ function renderDayOffs() {
   state.dayOffs.forEach(dayOff => {
     const item = document.createElement('div');
     item.className = 'dayoff-item';
-    const when = dayOff.is_recurring ? `Every ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dayOff.recurring_day_of_week]}` : dayOff.day_off_date;
+    const when = dayOff.is_recurring
+      ? `Every ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dayOff.recurring_day_of_week]}`
+      : formatIsoDateShort(dayOff.day_off_date);
     item.innerHTML = `
       <div class="dayoff-item-info">
         <strong>${when}</strong>
@@ -728,10 +994,10 @@ async function handleSaveProfile(event) {
     const bio = elements.profileBio.value.trim();
     const instagram = elements.profileInstagram.value.trim();
     const tiktok = elements.profileTiktok.value.trim();
-    const photoUrls = normalizePhotoUrls(elements.profilePhotos.value);
+    const services = serializeServiceList(state.serviceList);
     const updated = await apiCall(`/barbers/${state.user.id}`, {
       method: 'PUT',
-      body: JSON.stringify({ bio, instagram, tiktok, photoUrls }),
+      body: JSON.stringify({ bio, instagram, tiktok, services }),
     });
     state.user = { ...state.user, ...updated };
     showToast('Profile updated.');
@@ -749,12 +1015,12 @@ async function handleUploadPhotos() {
     const merged = [...existing, ...(uploadResult.uploaded || [])];
     const updated = await apiCall(`/barbers/${state.user.id}`, {
       method: 'PUT',
-      body: JSON.stringify({ photoUrls: merged }),
+      body: JSON.stringify({ photoUrls: merged, services: serializeServiceList(state.serviceList) }),
     });
     state.user = { ...state.user, ...updated };
-    elements.profilePhotos.value = normalizePhotoUrls(updated.photo_urls).join(', ');
     elements.photoFiles.value = '';
     elements.photoPreview.innerHTML = '';
+    renderCurrentPhotoPreview();
     showToast('Photos uploaded and profile updated.');
   } catch (error) {
     showToast('Upload failed: ' + error.message);
@@ -838,14 +1104,24 @@ async function refreshDayOffs() {
 }
 
 async function refreshAll() {
+  const isSenior = state.user.role === 'senior_barber';
+  const isBoss = state.user.role === 'boss';
+  const teamTab = document.querySelector('[data-tab="team"]');
+  const appointmentTab = document.querySelector('[data-tab="appointments"]');
+  const dayoffTab = document.querySelector('[data-tab="dayoffs"]');
+
+  if (isBoss || isSenior) {
+    teamTab?.classList.remove('hidden');
+  } else {
+    teamTab?.classList.add('hidden');
+  }
+
+  appointmentTab?.classList.remove('hidden');
+  dayoffTab?.classList.remove('hidden');
+  renderTab('appointments');
+
   await Promise.all([refreshAppointments(), refreshBarbers(), refreshDayOffs()]);
   renderProfileForm();
-  // Show team tab only for boss and senior_barber
-  if (state.user.role === 'boss' || state.user.role === 'senior_barber') {
-    document.querySelectorAll('.boss-only').forEach(el => el.classList.remove('hidden'));
-  } else {
-    document.querySelectorAll('.boss-only').forEach(el => el.classList.add('hidden'));
-  }
 }
 
 async function init() {
@@ -868,6 +1144,7 @@ async function init() {
   elements.loginForm.addEventListener('submit', handleLogin);
   elements.logoutButton.addEventListener('click', logout);
   elements.profileForm.addEventListener('submit', handleSaveProfile);
+  elements.serviceForm.addEventListener('submit', addOrUpdateService);
   elements.photoFiles.addEventListener('change', renderPhotoPreview);
   elements.uploadPhotosButton.addEventListener('click', handleUploadPhotos);
   elements.createBarberForm.addEventListener('submit', handleCreateBarber);

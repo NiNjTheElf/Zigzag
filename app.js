@@ -31,6 +31,12 @@ const elements = {
   logoutButton: document.getElementById('logout-button'),
   toast: document.getElementById('toast'),
 
+  // Gallery modal
+  galleryModal: document.getElementById('gallery-modal'),
+  closeGallery: document.getElementById('close-gallery'),
+  galleryTitle: document.getElementById('gallery-title'),
+  galleryContent: document.getElementById('gallery-content'),
+
   // Tabs
   tabButtons: document.querySelectorAll('.tab-button'),
 
@@ -124,12 +130,14 @@ function dateToDateKey(date) {
   return formatDateForInput(date);
 }
 
-function selectDayOffDate(date) {
-  const dateKey = formatDateForInput(date);
-  elements.dayoffDate.value = dateKey;
-  renderDayOffCalendar();
-  elements.dayoffNotes.focus();
-  showToast(`Selected ${formatDateDisplay(new Date(dateKey + 'T00:00:00'))} for day off.`);
+function updateLoginVisibility() {
+  const isLoggedIn = !!state.currentUser;
+  const loginButtons = [elements.openLogin, elements.heroLogin];
+  loginButtons.forEach(btn => {
+    if (btn) {
+      btn.style.display = isLoggedIn ? 'none' : 'inline-block';
+    }
+  });
 }
 
 // ==================== API CALLS ====================
@@ -376,6 +384,8 @@ function renderBarberProfiles() {
   state.barbers.forEach(barber => {
     const card = document.createElement('div');
     card.className = 'barber-profile-card';
+    card.style.cursor = 'pointer';
+    card.addEventListener('click', () => openGalleryModal(barber));
 
     const imageGrid = document.createElement('div');
     imageGrid.className = 'barber-profile-images';
@@ -400,6 +410,9 @@ function renderBarberProfiles() {
     name.textContent = barber.name;
     const bio = document.createElement('p');
     bio.textContent = barber.bio || 'Expert stylist with years of experience.';
+    const services = document.createElement('p');
+    services.className = 'barber-services';
+    services.textContent = barber.services ? barber.services : '';
     
     const reviews = document.createElement('div');
     reviews.className = 'barber-reviews';
@@ -428,6 +441,7 @@ function renderBarberProfiles() {
 
     content.appendChild(name);
     content.appendChild(bio);
+    if (barber.services) content.appendChild(services);
     content.appendChild(reviews);
     if (socials.children.length) content.appendChild(socials);
 
@@ -435,6 +449,31 @@ function renderBarberProfiles() {
     card.appendChild(content);
     elements.barberProfiles.appendChild(card);
   });
+}
+
+// ==================== GALLERY MODAL ====================
+
+function openGalleryModal(barber) {
+  elements.galleryTitle.textContent = `${barber.name}'s Gallery`;
+  elements.galleryContent.innerHTML = '';
+
+  const urls = normalizePhotoUrls(barber.photo_urls);
+  if (urls.length) {
+    urls.forEach(url => {
+      const img = document.createElement('img');
+      img.src = url;
+      img.alt = `${barber.name} portfolio`;
+      img.className = 'gallery-image';
+      elements.galleryContent.appendChild(img);
+    });
+  } else {
+    const placeholder = document.createElement('p');
+    placeholder.textContent = 'No photos available yet.';
+    placeholder.style.color = '#b9b1a8';
+    elements.galleryContent.appendChild(placeholder);
+  }
+
+  openModal(elements.galleryModal);
 }
 
 // ==================== CALENDAR RENDERING ====================
@@ -723,29 +762,31 @@ function renderDayOffList() {
 async function populateBarberSelects() {
   const barbers = await fetchBarbers();
 
-  // Booking form
-  elements.bookingBarber.innerHTML = '';
-  barbers.forEach(barber => {
-    const option = document.createElement('option');
-    option.value = barber.id;
-    option.textContent = barber.name;
-    elements.bookingBarber.appendChild(option);
-  });
-
-  // Day-off barber select (for boss and senior_barber)
-  elements.dayoffBarber.innerHTML = '';
-  if (state.currentUser && (state.currentUser.role === 'boss' || state.currentUser.role === 'senior_barber')) {
-    elements.dayoffBarber.style.display = '';
+  if (elements.bookingBarber) {
+    elements.bookingBarber.innerHTML = '';
     barbers.forEach(barber => {
       const option = document.createElement('option');
       option.value = barber.id;
       option.textContent = barber.name;
-      elements.dayoffBarber.appendChild(option);
+      elements.bookingBarber.appendChild(option);
     });
-  } else {
-    elements.dayoffBarber.style.display = 'none';
-    if (state.currentUser) {
-      elements.dayoffBarber.value = state.currentUser.id;
+  }
+
+  if (elements.dayoffBarber) {
+    elements.dayoffBarber.innerHTML = '';
+    if (state.currentUser && (state.currentUser.role === 'boss' || state.currentUser.role === 'senior_barber')) {
+      elements.dayoffBarber.style.display = '';
+      barbers.forEach(barber => {
+        const option = document.createElement('option');
+        option.value = barber.id;
+        option.textContent = barber.name;
+        elements.dayoffBarber.appendChild(option);
+      });
+    } else {
+      elements.dayoffBarber.style.display = 'none';
+      if (state.currentUser) {
+        elements.dayoffBarber.value = state.currentUser.id;
+      }
     }
   }
 
@@ -834,6 +875,7 @@ async function handleLoginSubmit(event) {
 
   try {
     const user = await login(email, password);
+    updateLoginVisibility();
     setupDashboard();
     closeModal(elements.loginModal);
     openModal(elements.dashboardModal);
@@ -899,6 +941,7 @@ function handleLogout() {
   state.appointments = [];
   state.dayOffs = [];
   localStorage.removeItem(STORAGE_KEY_TOKEN);
+  updateLoginVisibility();
   closeModal(elements.dashboardModal);
   showToast('Logged out successfully.');
 }
@@ -1077,50 +1120,84 @@ async function init() {
     }
   }
 
-  // Set min date for booking
+  // Update UI based on login status
+  updateLoginVisibility();
+
+  // Set min date for booking if present
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
-  elements.bookingDate.value = formatDateForInput(tomorrow);
-  elements.dayoffDate.min = formatDateForInput(new Date());
+  if (elements.bookingDate) {
+    elements.bookingDate.value = formatDateForInput(tomorrow);
+  }
+  if (elements.dayoffDate) {
+    elements.dayoffDate.min = formatDateForInput(new Date());
+  }
 
   // Event listeners
-  elements.bookingForm.addEventListener('submit', handleBookingSubmit);
-  elements.loginForm.addEventListener('submit', handleLoginSubmit);
-  elements.dayoffForm.addEventListener('submit', handleDayoffSubmit);
-  elements.createBarberForm.addEventListener('submit', handleCreateBarber);
+  if (elements.bookingForm) {
+    elements.bookingForm.addEventListener('submit', handleBookingSubmit);
+  }
+  if (elements.loginForm) {
+    elements.loginForm.addEventListener('submit', handleLoginSubmit);
+  }
+  if (elements.dayoffForm) {
+    elements.dayoffForm.addEventListener('submit', handleDayoffSubmit);
+  }
+  if (elements.createBarberForm) {
+    elements.createBarberForm.addEventListener('submit', handleCreateBarber);
+  }
   if (elements.profileForm) {
     elements.profileForm.addEventListener('submit', handleProfileSubmit);
   }
 
-  elements.bookingBarber.addEventListener('change', renderBookingSlots);
-  elements.bookingDate.addEventListener('change', renderBookingSlots);
+  if (elements.bookingBarber) {
+    elements.bookingBarber.addEventListener('change', renderBookingSlots);
+  }
+  if (elements.bookingDate) {
+    elements.bookingDate.addEventListener('change', renderBookingSlots);
+  }
 
-  elements.openLogin.addEventListener('click', () => {
-    // Auto-fill login form if credentials saved
-    const savedEmail = localStorage.getItem('zigzagLoginEmail');
-    const savedPassword = localStorage.getItem('zigzagLoginPassword');
-    if (savedEmail) elements.loginEmail.value = savedEmail;
-    if (savedPassword) elements.loginPassword.value = savedPassword;
-    openModal(elements.loginModal);
-  });
-  elements.heroLogin.addEventListener('click', () => {
-    // Auto-fill login form if credentials saved
-    const savedEmail = localStorage.getItem('zigzagLoginEmail');
-    const savedPassword = localStorage.getItem('zigzagLoginPassword');
-    if (savedEmail) elements.loginEmail.value = savedEmail;
-    if (savedPassword) elements.loginPassword.value = savedPassword;
-    openModal(elements.loginModal);
-  });
-  elements.closeLogin.addEventListener('click', () => closeModal(elements.loginModal));
-  elements.closeDashboard.addEventListener('click', () => closeModal(elements.dashboardModal));
-  elements.logoutButton.addEventListener('click', handleLogout);
+  if (elements.openLogin) {
+    elements.openLogin.addEventListener('click', () => {
+      const savedEmail = localStorage.getItem('zigzagLoginEmail');
+      const savedPassword = localStorage.getItem('zigzagLoginPassword');
+      if (savedEmail) elements.loginEmail.value = savedEmail;
+      if (savedPassword) elements.loginPassword.value = savedPassword;
+      openModal(elements.loginModal);
+    });
+  }
+  if (elements.heroLogin) {
+    elements.heroLogin.addEventListener('click', () => {
+      const savedEmail = localStorage.getItem('zigzagLoginEmail');
+      const savedPassword = localStorage.getItem('zigzagLoginPassword');
+      if (savedEmail) elements.loginEmail.value = savedEmail;
+      if (savedPassword) elements.loginPassword.value = savedPassword;
+      openModal(elements.loginModal);
+    });
+  }
+  if (elements.closeLogin) {
+    elements.closeLogin.addEventListener('click', () => closeModal(elements.loginModal));
+  }
+  if (elements.closeDashboard) {
+    elements.closeDashboard.addEventListener('click', () => closeModal(elements.dashboardModal));
+  }
+  if (elements.closeGallery) {
+    elements.closeGallery.addEventListener('click', () => closeModal(elements.galleryModal));
+  }
+  if (elements.logoutButton) {
+    elements.logoutButton.addEventListener('click', handleLogout);
+  }
 
-  elements.heroBook.addEventListener('click', () => {
-    document.location.href = 'booking.html';
-  });
-  elements.openBooking.addEventListener('click', () => {
-    document.location.href = 'booking.html';
-  });
+  if (elements.heroBook) {
+    elements.heroBook.addEventListener('click', () => {
+      document.location.href = 'booking.html';
+    });
+  }
+  if (elements.openBooking) {
+    elements.openBooking.addEventListener('click', () => {
+      document.location.href = 'booking.html';
+    });
+  }
 
   initTabs();
   initCalendarNav();

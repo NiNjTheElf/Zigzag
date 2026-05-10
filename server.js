@@ -50,6 +50,7 @@ const ensureSchema = async () => {
         ADD COLUMN IF NOT EXISTS instagram VARCHAR(255),
         ADD COLUMN IF NOT EXISTS tiktok VARCHAR(255),
         ADD COLUMN IF NOT EXISTS photo_urls TEXT[],
+        ADD COLUMN IF NOT EXISTS services TEXT,
         ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
     `);
 
@@ -60,6 +61,7 @@ const ensureSchema = async () => {
         ADD COLUMN IF NOT EXISTS client_phone VARCHAR(20),
         ADD COLUMN IF NOT EXISTS appointment_date DATE,
         ADD COLUMN IF NOT EXISTS appointment_time VARCHAR(10),
+        ADD COLUMN IF NOT EXISTS service_type VARCHAR(50),
         ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
     `);
 
@@ -120,7 +122,7 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     const token = jwt.sign({ id: user.id, email: user.email, role: user.role, name: user.name }, JWT_SECRET, { expiresIn: '7d' });
-    res.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role, bio: user.bio, instagram: user.instagram, tiktok: user.tiktok, photo_urls: user.photo_urls } });
+    res.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role, bio: user.bio, instagram: user.instagram, tiktok: user.tiktok, photo_urls: user.photo_urls, services: user.services } });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Login failed' });
@@ -130,7 +132,7 @@ app.post('/api/auth/login', async (req, res) => {
 app.get('/api/auth/me', authenticateToken, async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT id, name, email, role, bio, instagram, tiktok, photo_urls FROM users WHERE id = $1',
+      'SELECT id, name, email, role, bio, instagram, tiktok, photo_urls, services FROM users WHERE id = $1',
       [req.user.id]
     );
     if (!result.rows.length) {
@@ -147,7 +149,9 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
 
 app.get('/api/barbers', async (req, res) => {
   try {
-    const result = await pool.query('SELECT id, name, bio, instagram, tiktok, photo_urls FROM users WHERE role = $1', ['barber']);
+    const result = await pool.query(
+      `SELECT id, name, role, bio, instagram, tiktok, photo_urls, services FROM users WHERE role <> 'boss' ORDER BY role DESC, name ASC`
+    );
     res.json(result.rows);
   } catch (error) {
     console.error(error);
@@ -161,16 +165,15 @@ app.post('/api/barbers', authenticateToken, async (req, res) => {
     return res.status(403).json({ error: 'Only boss and senior barber can create staff accounts' });
   }
 
-  const { name, email, password, role, bio, instagram, tiktok, photoUrls } = req.body;
-  // Validate and normalize role
+  const { name, email, password, role, bio, instagram, tiktok, photoUrls, services } = req.body;
   const validRoles = ['boss', 'senior_barber', 'barber', 'junior_barber'];
   const normalizedRole = validRoles.includes(role) ? role : 'barber';
 
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
     const result = await pool.query(
-      'INSERT INTO users (name, email, password, role, bio, instagram, tiktok, photo_urls) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, name, email, role, bio, instagram, tiktok, photo_urls',
-      [name, email.toLowerCase(), hashedPassword, normalizedRole, bio || null, instagram || null, tiktok || null, photoUrls || null]
+      'INSERT INTO users (name, email, password, role, bio, instagram, tiktok, photo_urls, services) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id, name, email, role, bio, instagram, tiktok, photo_urls, services',
+      [name, email.toLowerCase(), hashedPassword, normalizedRole, bio || null, instagram || null, tiktok || null, photoUrls || null, services || null]
     );
     res.status(201).json(result.rows[0]);
   } catch (error) {
@@ -188,19 +191,50 @@ app.put('/api/barbers/:id', authenticateToken, async (req, res) => {
     return res.status(400).json({ error: 'Invalid barber ID' });
   }
 
-  if (req.user.role !== 'boss' && req.user.id !== barberId) {
-    return res.status(403).json({ error: 'Only a boss or the barber can update this profile' });
-  }
-
-  const { bio, instagram, tiktok, photoUrls } = req.body;
+  const { bio, instagram, tiktok, photoUrls, services, role } = req.body;
   try {
-    const result = await pool.query(
-      'UPDATE users SET bio = $1, instagram = $2, tiktok = $3, photo_urls = $4 WHERE id = $5 RETURNING id, name, email, role, bio, instagram, tiktok, photo_urls',
-      [bio || null, instagram || null, tiktok || null, photoUrls || null, barberId]
-    );
-    if (result.rows.length === 0) {
+    const existingResult = await pool.query('SELECT role, bio, instagram, tiktok, photo_urls, services FROM users WHERE id = $1', [barberId]);
+    if (existingResult.rows.length === 0) {
       return res.status(404).json({ error: 'Barber not found' });
     }
+    const existing = existingResult.rows[0];
+    const targetRole = existing.role;
+
+    if (req.user.id !== barberId && req.user.role !== 'boss' && req.user.role !== 'senior_barber') {
+      return res.status(403).json({ error: 'Only a boss or the barber can update this profile' });
+    }
+
+    let desiredRole = targetRole;
+    const validRoles = ['boss', 'senior_barber', 'barber', 'junior_barber'];
+
+    if (role && role !== targetRole) {
+      if (req.user.role === 'boss') {
+        desiredRole = validRoles.includes(role) ? role : targetRole;
+      } else if (req.user.role === 'senior_barber') {
+        if (targetRole === 'junior_barber' && role === 'barber') {
+          desiredRole = 'barber';
+        } else {
+          return res.status(403).json({ error: 'Senior barber can only change junior barber to regular barber' });
+        }
+      } else {
+        return res.status(403).json({ error: 'Cannot change role' });
+      }
+    }
+
+    if (req.user.id === barberId && role && role !== targetRole) {
+      return res.status(403).json({ error: 'You cannot change your own role' });
+    }
+
+    const updatedBio = bio !== undefined ? bio : existing.bio;
+    const updatedInstagram = instagram !== undefined ? instagram : existing.instagram;
+    const updatedTiktok = tiktok !== undefined ? tiktok : existing.tiktok;
+    const updatedPhotoUrls = photoUrls !== undefined ? photoUrls : existing.photo_urls;
+    const updatedServices = services !== undefined ? services : existing.services;
+
+    const result = await pool.query(
+      'UPDATE users SET bio = $1, instagram = $2, tiktok = $3, photo_urls = $4, services = $5, role = $6 WHERE id = $7 RETURNING id, name, email, role, bio, instagram, tiktok, photo_urls, services',
+      [updatedBio || null, updatedInstagram || null, updatedTiktok || null, updatedPhotoUrls || null, updatedServices || null, desiredRole, barberId]
+    );
     res.json(result.rows[0]);
   } catch (error) {
     console.error(error);
@@ -209,8 +243,8 @@ app.put('/api/barbers/:id', authenticateToken, async (req, res) => {
 });
 
 app.delete('/api/barbers/:id', authenticateToken, async (req, res) => {
-  if (req.user.role !== 'boss') {
-    return res.status(403).json({ error: 'Only boss can fire barbers' });
+  if (req.user.role !== 'boss' && req.user.role !== 'senior_barber') {
+    return res.status(403).json({ error: 'Only boss or senior barber can fire barbers' });
   }
 
   const barberId = parseInt(req.params.id);
@@ -220,8 +254,8 @@ app.delete('/api/barbers/:id', authenticateToken, async (req, res) => {
 
   try {
     const result = await pool.query(
-      'DELETE FROM users WHERE id = $1 AND role = $2 RETURNING id',
-      [barberId, 'barber']
+      'DELETE FROM users WHERE id = $1 AND role IN ($2, $3) RETURNING id',
+      [barberId, 'barber', 'junior_barber']
     );
 
     if (result.rows.length === 0) {
@@ -259,12 +293,16 @@ const normalizeAppointmentRecord = (row) => ({
 app.get('/api/appointments', authenticateToken, async (req, res) => {
   const { date, barberId } = req.query;
   try {
+    if (req.user.role === 'senior_barber') {
+      return res.json([]);
+    }
+
     let query = 'SELECT * FROM appointments';
     const params = [];
     const conditions = [];
 
-    // Non-boss/non-senior-barber users only see their own appointments
-    if (req.user.role !== 'boss' && req.user.role !== 'senior_barber') {
+    // Non-boss users only see their own appointments
+    if (req.user.role !== 'boss') {
       conditions.push('barber_id = $' + (params.length + 1));
       params.push(req.user.id);
     } else if (barberId) {
@@ -294,14 +332,17 @@ app.get('/api/appointments/month/:year/:month', authenticateToken, async (req, r
   const { year, month } = req.params;
   const { barberId } = req.query;
   try {
+    if (req.user.role === 'senior_barber') {
+      return res.json([]);
+    }
+
     const startDate = new Date(year, month - 1, 1).toISOString().split('T')[0];
     const endDate = new Date(year, month, 0).toISOString().split('T')[0];
 
     let query = 'SELECT * FROM appointments WHERE appointment_date BETWEEN $1 AND $2';
     const params = [startDate, endDate];
 
-    // Non-boss/non-senior-barber users only see their own appointments
-    if (req.user.role !== 'boss' && req.user.role !== 'senior_barber') {
+    if (req.user.role !== 'boss') {
       query += ' AND barber_id = $3';
       params.push(req.user.id);
     } else if (barberId) {
@@ -348,9 +389,8 @@ app.get('/api/appointments/available', async (req, res) => {
 });
 
 app.post('/api/appointments', async (req, res) => {
-  const { barberId, date, time, clientName, clientPhone } = req.body;
+  const { barberId, date, time, clientName, clientPhone, serviceType } = req.body;
   try {
-    // Verify slot is still available
     const checkDayOff = await pool.query(
       'SELECT * FROM day_offs WHERE barber_id = $1 AND (day_off_date = $2 OR (is_recurring = true AND recurring_day_of_week = $3))',
       [parseInt(barberId), date, parseDateString(date).getDay()]
@@ -370,8 +410,8 @@ app.post('/api/appointments', async (req, res) => {
     }
 
     const result = await pool.query(
-      'INSERT INTO appointments (barber_id, client_name, client_phone, appointment_date, appointment_time) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-      [parseInt(barberId), clientName, clientPhone, date, time]
+      'INSERT INTO appointments (barber_id, client_name, client_phone, appointment_date, appointment_time, service_type) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+      [parseInt(barberId), clientName, clientPhone, date, time, serviceType || 'Haircut']
     );
 
     console.log('Appointment booked:', result.rows[0]);

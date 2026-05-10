@@ -5,6 +5,7 @@ const elements = {
   barberGrid: document.getElementById('booking-barber-grid'),
   barberSelect: document.getElementById('booking-barber'),
   bookingDate: document.getElementById('booking-date'),
+  bookingService: document.getElementById('booking-service'),
   bookingTime: document.getElementById('booking-time'),
   bookingSlots: document.getElementById('booking-slots'),
   bookingForm: document.getElementById('booking-form'),
@@ -48,7 +49,7 @@ async function apiCall(endpoint, options = {}) {
     return response.json().catch(() => ({}));
   } catch (error) {
     const message = error.message.includes('Failed to fetch')
-      ? 'Cannot reach the API. Run the server and open the page at http://localhost:3001/booking.html'
+      ? 'Cannot reach the API. Run the server and open the page at http://localhost:3000/booking.html'
       : error.message;
     throw new Error(message);
   }
@@ -76,6 +77,7 @@ function renderBarberCards() {
       <div class="barber-profile-info">
         <strong>${barber.name}</strong>
         <p>${barber.bio || 'Experienced barber with available slots.'}</p>
+        ${barber.services ? `<p class="barber-services">${barber.services}</p>` : ''}
         <div class="barber-social-links"></div>
         <button class="btn btn-secondary">Select stylist</button>
       </div>
@@ -141,6 +143,37 @@ function renderBarberGallery() {
   });
 }
 
+function parseBarberServices(rawServices) {
+  if (!rawServices) return [];
+  if (Array.isArray(rawServices)) return rawServices.map(item => (typeof item === 'string' ? { name: item } : item));
+  if (typeof rawServices === 'string') {
+    const trimmed = rawServices.trim();
+    if (!trimmed) return [];
+    if (trimmed.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        return Array.isArray(parsed)
+          ? parsed.map(item => (typeof item === 'string' ? { name: item } : item))
+          : [];
+      } catch {
+        // legacy fallthrough
+      }
+    }
+    const parts = trimmed.split(';').map(s => s.trim()).filter(Boolean);
+    const services = [];
+    parts.forEach(part => {
+      const [category, items] = part.split(':').map(s => s.trim());
+      if (!items) return;
+      items.split(',').map(item => item.trim()).filter(Boolean).forEach(item => {
+        services.push({ name: `${category} - ${item}` });
+      });
+    });
+    if (services.length) return services;
+    return [{ name: trimmed }];
+  }
+  return [];
+}
+
 function fillBarberSelect() {
   elements.barberSelect.innerHTML = '';
   state.barbers.forEach(barber => {
@@ -159,6 +192,20 @@ function fillBarberSelect() {
 
 function setSelectedBarber(id) {
   state.selectedBarberId = id;
+  populateServiceSelect(id);
+}
+
+function populateServiceSelect(barberId) {
+  elements.bookingService.innerHTML = '';
+  const barber = state.barbers.find(b => String(b.id) === String(barberId));
+  const services = barber ? parseBarberServices(barber.services) : [];
+  const options = services.length ? services.map(s => s.name) : ['Haircut', 'Beard', 'Haircut + Beard'];
+  options.forEach(service => {
+    const option = document.createElement('option');
+    option.value = service;
+    option.textContent = service;
+    elements.bookingService.appendChild(option);
+  });
 }
 
 async function renderAvailableSlots() {
@@ -203,14 +250,14 @@ async function handleBookingSubmit(event) {
   const time = elements.bookingTime.value;
   const clientName = elements.clientName.value.trim();
   const clientPhone = elements.clientPhone.value.trim();
-  if (!barberId || !date || !time || !clientName || !clientPhone) {
+  if (!barberId || !date || !time || !clientName || !clientPhone || !elements.bookingService.value) {
     showToast('Complete all booking fields.');
     return;
   }
   try {
     await apiCall('/appointments', {
       method: 'POST',
-      body: JSON.stringify({ barberId, date, time, clientName, clientPhone }),
+      body: JSON.stringify({ barberId, date, time, clientName, clientPhone, serviceType: elements.bookingService.value }),
     });
     showToast('Appointment booked successfully.');
     elements.bookingForm.reset();

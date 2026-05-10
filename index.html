@@ -21,7 +21,7 @@
         <div class="hero-copy">
           <p class="eyebrow">Luxury hair design in the city</p>
           <h1>ZigZag Hairplace</h1>
-          <p>Where master barbers create stunning looks in a premium atmosphere. Book your appointment, choose your stylist, and enjoy fast, flawless service.</p>
+          <p>Master barbers creating stunning looks in a premium atmosphere.</p>
           <div class="hero-actions">
             <a id="hero-book" class="btn btn-primary" href="booking.html">Reserve Your Spot</a>
             <a id="hero-login" class="btn btn-black" href="staff.html">Staff Portal</a>
@@ -60,26 +60,18 @@
           <div class="contact-box">
             <h3>Our Location</h3>
             <p>Avotu iela 34, Latgales priekšpilsēta, Rīga, LV-1009</p>
+            <div class="location-map">
+              <iframe
+                src="https://www.google.com/maps?q=Avotu+iela+34+Riga&output=embed"
+                allowfullscreen=""
+                loading="lazy"
+                referrerpolicy="no-referrer-when-downgrade"
+              ></iframe>
+            </div>
           </div>
           <div class="contact-box">
             <h3>Opening times</h3>
             <p>Monday<br />11:00 AM - 8:00 PM<br /><br />Tuesday<br />11:00 AM - 8:00 PM<br /><br />Wednesday<br />11:00 AM - 8:00 PM<br /><br />Thursday<br />11:00 AM - 8:00 PM<br /><br />Friday<br />11:00 AM - 8:00 PM<br /><br />Saturday<br />11:00 AM - 8:00 PM<br /><br />Sunday<br />11:00 AM - 8:00 PM</p>
-          </div>
-        </div>
-        <div class="location-grid">
-          <div class="location-gallery">
-            <div class="gallery-image" style="background-image: url('https://images.unsplash.com/photo-1515492104389-3465400591cc?auto=format&fit=crop&w=900&q=80');"></div>
-            <div class="gallery-image" style="background-image: url('https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?auto=format&fit=crop&w=900&q=80');"></div>
-            <div class="gallery-image" style="background-image: url('https://images.unsplash.com/photo-1502767089025-6572583495b0?auto=format&fit=crop&w=900&q=80');"></div>
-          </div>
-          <div class="location-map">
-            <h3>Google map</h3>
-            <iframe
-              src="https://www.google.com/maps?q=Avotu+iela+34+Riga&output=embed"
-              allowfullscreen=""
-              loading="lazy"
-              referrerpolicy="no-referrer-when-downgrade"
-            ></iframe>
           </div>
         </div>
       </section>
@@ -258,5 +250,13 @@
   </div>
 
   <div id="toast" class="toast hidden"></div>
+
+  <div id="gallery-modal" class="modal hidden" aria-hidden="true">
+    <div class="modal-panel gallery-modal-panel">
+      <button id="close-gallery" class="close-btn" aria-label="Close gallery">×</button>
+      <h2 id="gallery-title">Barber Gallery</h2>
+      <div id="gallery-content" class="gallery-content"></div>
+    </div>
+  </div>
 </body>
 </html>

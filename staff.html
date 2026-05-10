@@ -17,7 +17,6 @@
       <section class="section about-section">
         <div class="section-heading">
           <p class="eyebrow">Staff Portal</p>
-          <h2>Login to manage appointments, profiles, and barber photo galleries.</h2>
         </div>
         <div id="login-section" class="booking-card">
           <h3>Staff login</h3>
@@ -92,10 +91,29 @@
                   </div>
                 </div>
                 <div class="form-group">
-                  <label for="profile-photos">Photo URLs</label>
-                  <input id="profile-photos" type="text" placeholder="Comma-separated image URLs" />
+                  <label>Services</label>
+                  <div id="service-cards" class="service-card-grid"></div>
+                </div>
+                <div class="form-group">
+                  <label>Current barber photos</label>
+                  <div id="current-photo-preview" class="photo-preview-grid"></div>
                 </div>
                 <button class="btn btn-primary" type="submit">Save profile</button>
+              </form>
+            </div>
+
+            <div class="booking-card service-form-card">
+              <h4>Add or edit a service</h4>
+              <form id="service-form" class="booking-form">
+                <div class="form-group">
+                  <label for="service-name">Service name</label>
+                  <input id="service-name" type="text" placeholder="Haircut + Beard" required />
+                </div>
+                <div class="form-group">
+                  <label for="service-photo-url">Service photo URL</label>
+                  <input id="service-photo-url" type="text" placeholder="https://example.com/photo.jpg" />
+                </div>
+                <button class="btn btn-primary" type="submit">Save service</button>
               </form>
             </div>
 
