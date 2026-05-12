@@ -82,13 +82,29 @@ const ensureSchema = async () => {
     `);
 
     await client.query(`
+      ALTER TABLE reviews
+        ADD COLUMN IF NOT EXISTS barber_id INTEGER,
+        ADD COLUMN IF NOT EXISTS client_name VARCHAR(255),
+        ADD COLUMN IF NOT EXISTS client_phone VARCHAR(20),
+        ADD COLUMN IF NOT EXISTS reviewer_name VARCHAR(255),
+        ADD COLUMN IF NOT EXISTS reviewer_phone VARCHAR(20),
+        ADD COLUMN IF NOT EXISTS rating INTEGER,
+        ADD COLUMN IF NOT EXISTS comment TEXT,
+        ADD COLUMN IF NOT EXISTS review_text TEXT,
+        ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+    `);
+
+    await client.query(`
       CREATE TABLE IF NOT EXISTS reviews (
         id SERIAL PRIMARY KEY,
         barber_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         client_name VARCHAR(255) NOT NULL,
         client_phone VARCHAR(20) NOT NULL,
+        reviewer_name VARCHAR(255),
+        reviewer_phone VARCHAR(20),
         rating INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 5),
         comment TEXT,
+        review_text TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
@@ -351,8 +367,8 @@ app.get('/api/appointments/month/:year/:month', authenticateToken, async (req, r
   const { year, month } = req.params;
   const { barberId } = req.query;
   try {
-    const startDate = new Date(year, month - 1, 1).toISOString().split('T')[0];
-    const endDate = new Date(year, month, 0).toISOString().split('T')[0];
+    const startDate = formatDateOnly(new Date(year, month - 1, 1));
+    const endDate = formatDateOnly(new Date(year, month, 0));
 
     let query = 'SELECT * FROM appointments WHERE appointment_date BETWEEN $1 AND $2';
     const params = [startDate, endDate];
@@ -600,8 +616,8 @@ app.get('/api/dayoffs', authenticateToken, async (req, res) => {
     }
 
     if (year && month) {
-      const startDate = new Date(year, month - 1, 1).toISOString().split('T')[0];
-      const endDate = new Date(year, month, 0).toISOString().split('T')[0];
+      const startDate = formatDateOnly(new Date(year, month - 1, 1));
+      const endDate = formatDateOnly(new Date(year, month, 0));
       query += ' AND day_off_date BETWEEN $' + (params.length + 1) + ' AND $' + (params.length + 2);
       params.push(startDate, endDate);
     }
@@ -622,7 +638,7 @@ app.post('/api/dayoffs', authenticateToken, async (req, res) => {
   try {
     const result = await pool.query(
       'INSERT INTO day_offs (barber_id, day_off_date, is_recurring, recurring_day_of_week, notes) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-      [barberId, date, isRecurring || false, recurringDayOfWeek || null, notes || null]
+      [barberId, date, isRecurring || false, isRecurring ? (recurringDayOfWeek !== null && recurringDayOfWeek !== undefined ? recurringDayOfWeek : null) : null, notes || null]
     );
     res.status(201).json(result.rows[0]);
   } catch (error) {
@@ -681,7 +697,15 @@ app.delete('/api/dayoffs/:id', authenticateToken, async (req, res) => {
 app.get('/api/reviews', async (req, res) => {
   const { barberId } = req.query;
   try {
-    let query = 'SELECT id, barber_id, client_name, rating, comment, created_at FROM reviews';
+    let query = `SELECT
+        id,
+        barber_id,
+        COALESCE(reviewer_name, client_name) AS client_name,
+        COALESCE(reviewer_phone, client_phone) AS client_phone,
+        rating,
+        COALESCE(review_text, comment) AS comment,
+        created_at
+      FROM reviews`;
     const params = [];
 
     if (barberId) {
@@ -739,8 +763,17 @@ app.post('/api/reviews', async (req, res) => {
     }
 
     const result = await pool.query(
-      'INSERT INTO reviews (barber_id, client_name, client_phone, rating, comment) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-      [parseInt(barberId), clientName, clientPhone, parseInt(rating), comment || null]
+      'INSERT INTO reviews (barber_id, client_name, client_phone, reviewer_name, reviewer_phone, rating, comment, review_text) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
+      [
+        parseInt(barberId),
+        clientName,
+        clientPhone,
+        clientName,
+        clientPhone,
+        parseInt(rating),
+        comment || null,
+        comment || null,
+      ]
     );
 
     res.status(201).json(result.rows[0]);

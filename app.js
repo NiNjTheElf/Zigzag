@@ -3,30 +3,6 @@ const STORAGE_KEY_TOKEN = 'zigzagAuthToken';
 const SLOT_TIMES = ['10:00 AM', '11:30 AM', '1:00 PM', '2:30 PM', '4:00 PM', '5:30 PM'];
 const DAYS_OF_WEEK = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-// Theme management
-function initTheme() {
-  const savedTheme = localStorage.getItem('zigzagTheme') || 'dark';
-  document.documentElement.setAttribute('data-theme', savedTheme);
-  if (savedTheme === 'light') {
-    document.body.classList.add('light-theme');
-  }
-  
-  const themeToggle = document.getElementById('theme-toggle');
-  if (themeToggle) {
-    themeToggle.textContent = savedTheme === 'dark' ? '☀️' : '🌙';
-    themeToggle.addEventListener('click', () => {
-      const currentTheme = localStorage.getItem('zigzagTheme') || 'dark';
-      const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-      localStorage.setItem('zigzagTheme', newTheme);
-      document.documentElement.setAttribute('data-theme', newTheme);
-      document.body.classList.toggle('light-theme');
-      themeToggle.textContent = newTheme === 'dark' ? '☀️' : '🌙';
-    });
-  }
-}
-
-initTheme();
-
 const elements = {
   // Auth
   loginModal: document.getElementById('login-modal'),
@@ -468,10 +444,9 @@ function renderBarberProfiles() {
     const reviews = document.createElement('div');
     reviews.className = 'barber-reviews';
     reviews.innerHTML = `
-      <div class="review-stars">★★★★★</div>
-      <p>"Amazing cut! Highly recommend!" - John D.</p>
-      <p>"Best barber in town. Always on point." - Sarah M.</p>
+      <div class="review-stars">Loading reviews...</div>
     `;
+    loadBarberReviewSummary(barber, reviews);
     
     const socials = document.createElement('div');
     socials.className = 'barber-social-links';
@@ -500,6 +475,37 @@ function renderBarberProfiles() {
     card.appendChild(content);
     elements.barberProfiles.appendChild(card);
   });
+}
+
+async function loadBarberReviewSummary(barber, reviewsElement) {
+  try {
+    const [reviews, ratingData] = await Promise.all([
+      apiCall(`/reviews?barberId=${barber.id}`),
+      apiCall(`/reviews/average/${barber.id}`)
+    ]);
+
+    const average = ratingData && ratingData.average ? Number(ratingData.average) : 0;
+    const count = ratingData?.count || 0;
+    const starCount = Math.min(5, Math.max(0, Math.round(average)));
+    const stars = '★'.repeat(starCount) + '☆'.repeat(5 - starCount);
+
+    let html = `<div class="review-stars">${stars}</div>`;
+    if (count === 0 || !reviews || reviews.length === 0) {
+      html += '<p>No reviews yet.</p>';
+    } else {
+      reviews.slice(0, 2).forEach(review => {
+        const comment = review.comment ? review.comment : 'Great experience.';
+        html += `<p>"${comment}" - ${review.client_name}</p>`;
+      });
+    }
+
+    reviewsElement.innerHTML = html;
+  } catch (error) {
+    console.error('Failed to load barber reviews', error);
+    if (reviewsElement) {
+      reviewsElement.innerHTML = `<div class="review-stars">☆☆☆☆☆</div><p>Reviews unavailable.</p>`;
+    }
+  }
 }
 
 // ==================== GALLERY MODAL ====================

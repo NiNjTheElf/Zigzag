@@ -1,30 +1,6 @@
 const API_BASE = (window.location.protocol === 'file:' ? 'http://localhost:3000' : window.location.origin) + '/api';
 const SLOT_TIMES = ['10:00 AM', '11:30 AM', '1:00 PM', '2:30 PM', '4:00 PM', '5:30 PM'];
 
-// Theme management
-function initTheme() {
-  const savedTheme = localStorage.getItem('zigzagTheme') || 'dark';
-  document.documentElement.setAttribute('data-theme', savedTheme);
-  if (savedTheme === 'light') {
-    document.body.classList.add('light-theme');
-  }
-  
-  const themeToggle = document.getElementById('theme-toggle');
-  if (themeToggle) {
-    themeToggle.textContent = savedTheme === 'dark' ? '☀️' : '🌙';
-    themeToggle.addEventListener('click', () => {
-      const currentTheme = localStorage.getItem('zigzagTheme') || 'dark';
-      const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-      localStorage.setItem('zigzagTheme', newTheme);
-      document.documentElement.setAttribute('data-theme', newTheme);
-      document.body.classList.toggle('light-theme');
-      themeToggle.textContent = newTheme === 'dark' ? '☀️' : '🌙';
-    });
-  }
-}
-
-initTheme();
-
 const elements = {
   barberGrid: document.getElementById('booking-barber-grid'),
   barberSelect: document.getElementById('booking-barber'),

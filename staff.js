@@ -1,30 +1,6 @@
 const API_BASE = (window.location.protocol === 'file:' ? 'http://localhost:3000' : window.location.origin) + '/api';
 const STORAGE_KEY_TOKEN = 'zigzagStaffToken';
 
-// Theme management
-function initTheme() {
-  const savedTheme = localStorage.getItem('zigzagTheme') || 'dark';
-  document.documentElement.setAttribute('data-theme', savedTheme);
-  if (savedTheme === 'light') {
-    document.body.classList.add('light-theme');
-  }
-  
-  const themeToggle = document.getElementById('theme-toggle');
-  if (themeToggle) {
-    themeToggle.textContent = savedTheme === 'dark' ? '☀️' : '🌙';
-    themeToggle.addEventListener('click', () => {
-      const currentTheme = localStorage.getItem('zigzagTheme') || 'dark';
-      const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-      localStorage.setItem('zigzagTheme', newTheme);
-      document.documentElement.setAttribute('data-theme', newTheme);
-      document.body.classList.toggle('light-theme');
-      themeToggle.textContent = newTheme === 'dark' ? '☀️' : '🌙';
-    });
-  }
-}
-
-initTheme();
-
 const state = {
   token: null,
   user: null,
@@ -328,8 +304,28 @@ function serializeServiceList(list) {
 
 function normalizeDateKey(rawDate) {
   if (!rawDate) return '';
-  if (typeof rawDate === 'string') return rawDate.split('T')[0];
-  return formatDateForInput(new Date(rawDate));
+
+  if (typeof rawDate === 'string') {
+    const match = rawDate.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (match) return match[1];
+  }
+
+  if (rawDate instanceof Date && !Number.isNaN(rawDate.getTime())) {
+    const year = rawDate.getUTCFullYear();
+    const month = String(rawDate.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(rawDate.getUTCDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  const parsed = new Date(rawDate);
+  if (!Number.isNaN(parsed.getTime())) {
+    const year = parsed.getUTCFullYear();
+    const month = String(parsed.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(parsed.getUTCDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  return '';
 }
 
 function getProfilePhotoUrl(user) {
@@ -520,13 +516,22 @@ function formatDateForInput(date) {
 }
 
 function formatIsoDateShort(rawDate) {
+  if (!rawDate) return '';
+
+  if (typeof rawDate === 'string') {
+    const match = rawDate.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+      return `${match[1]}.${match[2]}.${match[3]}`;
+    }
+  }
+
   const parsed = new Date(rawDate);
   if (Number.isNaN(parsed.getTime())) {
     return rawDate;
   }
-  const year = parsed.getFullYear();
-  const month = String(parsed.getMonth() + 1).padStart(2, '0');
-  const day = String(parsed.getDate()).padStart(2, '0');
+  const year = parsed.getUTCFullYear();
+  const month = String(parsed.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(parsed.getUTCDate()).padStart(2, '0');
   return `${year}.${month}.${day}`;
 }
 
@@ -903,9 +908,13 @@ function renderDayOffsCalendar() {
 
   // Create dayoff map for quick lookup
   const dayoffMap = {};
+  const recurringDayOfWeeks = new Set();
   state.dayOffs.forEach(dayOff => {
     const dateKey = normalizeDateKey(dayOff.day_off_date);
     dayoffMap[dateKey] = dayOff;
+    if (dayOff.is_recurring && dayOff.recurring_day_of_week !== null && dayOff.recurring_day_of_week !== undefined) {
+      recurringDayOfWeeks.add(dayOff.recurring_day_of_week);
+    }
   });
 
   // Clear calendar
@@ -943,8 +952,13 @@ function renderDayOffsCalendar() {
     }
 
     const dayOff = dayoffMap[dateKey];
+    const dayOfWeek = date.getDay();
+    const isRecurringDayOff = recurringDayOfWeeks.has(dayOfWeek);
+    
     if (dayOff) {
       dayElement.classList.add('has-dayoff');
+    } else if (isRecurringDayOff) {
+      dayElement.classList.add('has-recurring-dayoff');
     }
 
     const dayNumber = document.createElement('div');
@@ -972,7 +986,7 @@ function selectDayOffDate(date) {
   const dateKey = formatDateForInput(date);
   state.selectedDayoffDate = dateKey;
   if (elements.dayoffDate) {
-    elements.dayoffDate.value = formatIsoDateShort(dateKey);
+    elements.dayoffDate.value = dateKey;
   }
   
   const appointmentsOnDate = state.appointments.filter(appt => normalizeDateKey(appt.appointment_date) === dateKey);
@@ -1116,22 +1130,24 @@ async function handleDayoffSubmit(event) {
   }
   try {
     const date = state.selectedDayoffDate;
+    const [year, month, day] = date.split('-').map(Number);
+    const adjustedDate = new Date(year, month - 1, day + 1);
+    const adjustedDateStr = formatDateForInput(adjustedDate);
+    const originalDate = new Date(year, month - 1, day);
     const isRecurring = elements.dayoffRecurring.checked;
     const notes = elements.dayoffNotes.value.trim();
     
     // Parse date in local timezone (not UTC)
     let recurringDayOfWeek = null;
     if (isRecurring) {
-      const [year, month, day] = date.split('-').map(Number);
-      const localDate = new Date(year, month - 1, day);
-      recurringDayOfWeek = localDate.getDay();
+      recurringDayOfWeek = originalDate.getDay();
     }
     
     await apiCall('/dayoffs', {
       method: 'POST',
       body: JSON.stringify({ 
         barberId: state.user.id,
-        date, 
+        date: adjustedDateStr, 
         isRecurring, 
         recurringDayOfWeek,
         notes 
