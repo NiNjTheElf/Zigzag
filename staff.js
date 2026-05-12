@@ -1,6 +1,30 @@
 const API_BASE = (window.location.protocol === 'file:' ? 'http://localhost:3000' : window.location.origin) + '/api';
 const STORAGE_KEY_TOKEN = 'zigzagStaffToken';
 
+// Theme management
+function initTheme() {
+  const savedTheme = localStorage.getItem('zigzagTheme') || 'dark';
+  document.documentElement.setAttribute('data-theme', savedTheme);
+  if (savedTheme === 'light') {
+    document.body.classList.add('light-theme');
+  }
+  
+  const themeToggle = document.getElementById('theme-toggle');
+  if (themeToggle) {
+    themeToggle.textContent = savedTheme === 'dark' ? '☀️' : '🌙';
+    themeToggle.addEventListener('click', () => {
+      const currentTheme = localStorage.getItem('zigzagTheme') || 'dark';
+      const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+      localStorage.setItem('zigzagTheme', newTheme);
+      document.documentElement.setAttribute('data-theme', newTheme);
+      document.body.classList.toggle('light-theme');
+      themeToggle.textContent = newTheme === 'dark' ? '☀️' : '🌙';
+    });
+  }
+}
+
+initTheme();
+
 const state = {
   token: null,
   user: null,
@@ -966,9 +990,10 @@ function renderDayOffs() {
   state.dayOffs.forEach(dayOff => {
     const item = document.createElement('div');
     item.className = 'dayoff-item';
-    const when = dayOff.is_recurring
-      ? `Every ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dayOff.recurring_day_of_week]}`
-      : formatIsoDateShort(dayOff.day_off_date);
+    let when = formatIsoDateShort(dayOff.day_off_date);
+    if (dayOff.is_recurring && dayOff.recurring_day_of_week !== null && dayOff.recurring_day_of_week !== undefined) {
+      when = `Every ${['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][dayOff.recurring_day_of_week]}`;
+    }
     item.innerHTML = `
       <div class="dayoff-item-info">
         <strong>${when}</strong>
@@ -1094,13 +1119,21 @@ async function handleDayoffSubmit(event) {
     const isRecurring = elements.dayoffRecurring.checked;
     const notes = elements.dayoffNotes.value.trim();
     
+    // Parse date in local timezone (not UTC)
+    let recurringDayOfWeek = null;
+    if (isRecurring) {
+      const [year, month, day] = date.split('-').map(Number);
+      const localDate = new Date(year, month - 1, day);
+      recurringDayOfWeek = localDate.getDay();
+    }
+    
     await apiCall('/dayoffs', {
       method: 'POST',
       body: JSON.stringify({ 
         barberId: state.user.id,
         date, 
         isRecurring, 
-        recurringDayOfWeek: new Date(date + 'T00:00:00').getDay(), 
+        recurringDayOfWeek,
         notes 
       }),
     });

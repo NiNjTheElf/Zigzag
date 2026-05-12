@@ -80,6 +80,22 @@ const ensureSchema = async () => {
         ADD COLUMN IF NOT EXISTS notes VARCHAR(255),
         ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
     `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS reviews (
+        id SERIAL PRIMARY KEY,
+        barber_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        client_name VARCHAR(255) NOT NULL,
+        client_phone VARCHAR(20) NOT NULL,
+        rating INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 5),
+        comment TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_reviews_barber_id ON reviews(barber_id);
+    `);
   } finally {
     client.release();
   }
@@ -304,8 +320,8 @@ app.get('/api/appointments', authenticateToken, async (req, res) => {
     const params = [];
     const conditions = [];
 
-    // Non-boss users only see their own appointments
-    if (req.user.role !== 'boss' && req.user.role !== 'senior_barber') {
+    // Only boss can see all appointments. Senior barbers and regular barbers only see their own
+    if (req.user.role !== 'boss') {
       conditions.push('barber_id = $' + (params.length + 1));
       params.push(req.user.id);
     } else if (barberId) {
@@ -341,7 +357,7 @@ app.get('/api/appointments/month/:year/:month', authenticateToken, async (req, r
     let query = 'SELECT * FROM appointments WHERE appointment_date BETWEEN $1 AND $2';
     const params = [startDate, endDate];
 
-    if (req.user.role !== 'boss' && req.user.role !== 'senior_barber') {
+    if (req.user.role !== 'boss') {
       query += ' AND barber_id = $3';
       params.push(req.user.id);
     } else if (barberId) {
@@ -574,7 +590,8 @@ app.get('/api/dayoffs', authenticateToken, async (req, res) => {
     let query = 'SELECT * FROM day_offs WHERE 1=1';
     const params = [];
 
-    if (req.user.role !== 'boss' && req.user.role !== 'senior_barber') {
+    // Only boss can see all day offs. Senior barbers and regular barbers only see their own
+    if (req.user.role !== 'boss') {
       query += ' AND barber_id = $' + (params.length + 1);
       params.push(req.user.id);
     } else if (barberId) {
@@ -656,6 +673,80 @@ app.delete('/api/dayoffs/:id', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to delete day-off' });
+  }
+});
+
+// ==================== REVIEW ROUTES ====================
+
+app.get('/api/reviews', async (req, res) => {
+  const { barberId } = req.query;
+  try {
+    let query = 'SELECT id, barber_id, client_name, rating, comment, created_at FROM reviews';
+    const params = [];
+
+    if (barberId) {
+      query += ' WHERE barber_id = $1';
+      params.push(parseInt(barberId));
+    }
+
+    query += ' ORDER BY created_at DESC';
+    const result = await pool.query(query, params);
+    res.json(result.rows);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to fetch reviews' });
+  }
+});
+
+app.get('/api/reviews/average/:barberId', async (req, res) => {
+  const { barberId } = req.params;
+  try {
+    const result = await pool.query(
+      'SELECT ROUND(AVG(rating)::numeric, 1) as average, COUNT(*) as count FROM reviews WHERE barber_id = $1',
+      [parseInt(barberId)]
+    );
+    const row = result.rows[0];
+    res.json({
+      average: row.average ? parseFloat(row.average) : 0,
+      count: parseInt(row.count),
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to fetch average rating' });
+  }
+});
+
+app.post('/api/reviews', async (req, res) => {
+  const { barberId, clientName, clientPhone, rating, comment } = req.body;
+
+  if (!barberId || !clientName || !clientPhone || !rating) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  if (rating < 1 || rating > 5 || !Number.isInteger(rating)) {
+    return res.status(400).json({ error: 'Rating must be between 1 and 5' });
+  }
+
+  try {
+    // Check if the client has an appointment with this barber
+    const appointmentCheck = await pool.query(
+      'SELECT id FROM appointments WHERE barber_id = $1 AND client_phone = $2',
+      [parseInt(barberId), clientPhone]
+    );
+
+    if (appointmentCheck.rows.length === 0) {
+      return res.status(403).json({ error: 'You must have an appointment with this barber to leave a review' });
+    }
+
+    const result = await pool.query(
+      'INSERT INTO reviews (barber_id, client_name, client_phone, rating, comment) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [parseInt(barberId), clientName, clientPhone, parseInt(rating), comment || null]
+    );
+
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to create review' });
   }
 });
 

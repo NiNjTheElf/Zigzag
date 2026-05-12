@@ -3,6 +3,30 @@ const STORAGE_KEY_TOKEN = 'zigzagAuthToken';
 const SLOT_TIMES = ['10:00 AM', '11:30 AM', '1:00 PM', '2:30 PM', '4:00 PM', '5:30 PM'];
 const DAYS_OF_WEEK = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
+// Theme management
+function initTheme() {
+  const savedTheme = localStorage.getItem('zigzagTheme') || 'dark';
+  document.documentElement.setAttribute('data-theme', savedTheme);
+  if (savedTheme === 'light') {
+    document.body.classList.add('light-theme');
+  }
+  
+  const themeToggle = document.getElementById('theme-toggle');
+  if (themeToggle) {
+    themeToggle.textContent = savedTheme === 'dark' ? '☀️' : '🌙';
+    themeToggle.addEventListener('click', () => {
+      const currentTheme = localStorage.getItem('zigzagTheme') || 'dark';
+      const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+      localStorage.setItem('zigzagTheme', newTheme);
+      document.documentElement.setAttribute('data-theme', newTheme);
+      document.body.classList.toggle('light-theme');
+      themeToggle.textContent = newTheme === 'dark' ? '☀️' : '🌙';
+    });
+  }
+}
+
+initTheme();
+
 const elements = {
   // Auth
   loginModal: document.getElementById('login-modal'),
@@ -267,14 +291,19 @@ async function getAvailableSlots(barberId, date) {
 }
 
 async function addDayOff(barberId, date, isRecurring, notes) {
-  const recurringDayOfWeek = new Date(date + 'T00:00:00').getDay();
+  let recurringDayOfWeek = null;
+  if (isRecurring) {
+    const [year, month, day] = date.split('-').map(Number);
+    const localDate = new Date(year, month - 1, day);
+    recurringDayOfWeek = localDate.getDay();
+  }
   return await apiCall('/dayoffs', {
     method: 'POST',
     body: JSON.stringify({
       barberId,
       date,
       isRecurring,
-      recurringDayOfWeek: isRecurring ? recurringDayOfWeek : null,
+      recurringDayOfWeek,
       notes,
     }),
     headers: getAuthHeader(),
