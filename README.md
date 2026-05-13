@@ -71,12 +71,16 @@ npm install
 # Copy from .env.example and update values:
 cp .env.example .env
 
+# If you are using Supabase, set DATABASE_URL to your Supabase Postgres connection string:
+# DATABASE_URL="postgresql://postgres:<password>@<project>.db.supabase.co:5432/postgres?schema=public"
+
 # Edit .env file
 # DB_USER=postgres
 # DB_PASSWORD=your_postgres_password
 # DB_HOST=localhost
 # DB_PORT=5432
 # DB_NAME=zigzag_hairplace
+# DATABASE_URL="postgresql://postgres:postgres@localhost:5432/zigzag_hairplace?schema=public"
 # JWT_SECRET=change_this_to_a_secure_random_string
 # PORT=3000
 

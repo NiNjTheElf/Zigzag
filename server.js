@@ -2,13 +2,14 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
-const { Pool } = require('pg');
+const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const cors = require('cors');
 require('dotenv').config();
 
 const app = express();
+const prisma = new PrismaClient();
 
 const uploadsDir = path.join(__dirname, 'uploads');
 fs.mkdirSync(uploadsDir, { recursive: true });
@@ -19,15 +20,6 @@ app.use(express.json());
 app.use(express.static('./'));
 app.use('/uploads', express.static(uploadsDir));
 
-// PostgreSQL connection
-const pool = new Pool({
-  user: process.env.DB_USER || 'postgres',
-  password: process.env.DB_PASSWORD || 'postgres',
-  host: process.env.DB_HOST || 'localhost',
-  port: process.env.DB_PORT || 5432,
-  database: process.env.DB_NAME || 'zigzag_hairplace'
-});
-
 const storage = multer.diskStorage({
   destination: uploadsDir,
   filename: (req, file, cb) => {
@@ -37,94 +29,20 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage, limits: { fileSize: 8 * 1024 * 1024 } });
 
-pool.on('error', (err) => {
-  console.error('Unexpected error on idle client', err);
-});
-
 const ensureSchema = async () => {
-  const client = await pool.connect();
-  try {
-    await client.query(`
-      ALTER TABLE users
-        ADD COLUMN IF NOT EXISTS bio TEXT,
-        ADD COLUMN IF NOT EXISTS instagram VARCHAR(255),
-        ADD COLUMN IF NOT EXISTS tiktok VARCHAR(255),
-        ADD COLUMN IF NOT EXISTS profile_photo_url TEXT,
-        ADD COLUMN IF NOT EXISTS photo_urls TEXT[],
-        ADD COLUMN IF NOT EXISTS services TEXT,
-        ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
-    `);
-
-    await client.query(`
-      ALTER TABLE appointments
-        ADD COLUMN IF NOT EXISTS barber_id INTEGER,
-        ADD COLUMN IF NOT EXISTS client_name VARCHAR(255),
-        ADD COLUMN IF NOT EXISTS client_phone VARCHAR(20),
-        ADD COLUMN IF NOT EXISTS appointment_date DATE,
-        ADD COLUMN IF NOT EXISTS appointment_time VARCHAR(10),
-        ADD COLUMN IF NOT EXISTS service_type VARCHAR(255),
-        ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
-    `);
-
-    await client.query(`
-      ALTER TABLE appointments
-        ALTER COLUMN service_type TYPE VARCHAR(255);
-    `);
-
-    await client.query(`
-      ALTER TABLE day_offs
-        ADD COLUMN IF NOT EXISTS barber_id INTEGER,
-        ADD COLUMN IF NOT EXISTS day_off_date DATE,
-        ADD COLUMN IF NOT EXISTS is_recurring BOOLEAN DEFAULT FALSE,
-        ADD COLUMN IF NOT EXISTS recurring_day_of_week INTEGER,
-        ADD COLUMN IF NOT EXISTS notes VARCHAR(255),
-        ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
-    `);
-
-    await client.query(`
-      ALTER TABLE reviews
-        ADD COLUMN IF NOT EXISTS barber_id INTEGER,
-        ADD COLUMN IF NOT EXISTS client_name VARCHAR(255),
-        ADD COLUMN IF NOT EXISTS client_phone VARCHAR(20),
-        ADD COLUMN IF NOT EXISTS reviewer_name VARCHAR(255),
-        ADD COLUMN IF NOT EXISTS reviewer_phone VARCHAR(20),
-        ADD COLUMN IF NOT EXISTS rating INTEGER,
-        ADD COLUMN IF NOT EXISTS comment TEXT,
-        ADD COLUMN IF NOT EXISTS review_text TEXT,
-        ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
-    `);
-
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS reviews (
-        id SERIAL PRIMARY KEY,
-        barber_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        client_name VARCHAR(255) NOT NULL,
-        client_phone VARCHAR(20) NOT NULL,
-        reviewer_name VARCHAR(255),
-        reviewer_phone VARCHAR(20),
-        rating INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 5),
-        comment TEXT,
-        review_text TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-
-    await client.query(`
-      CREATE INDEX IF NOT EXISTS idx_reviews_barber_id ON reviews(barber_id);
-    `);
-  } finally {
-    client.release();
-  }
+  // Prisma handles schema management automatically
+  console.log('✅ Prisma client initialized successfully');
 };
 
 const initializeDatabase = async () => {
-  const client = await pool.connect();
   try {
-    console.log('✅ Connected to PostgreSQL database successfully.');
+    await prisma.$connect();
+    console.log('✅ Connected to database successfully via Prisma.');
     await ensureSchema();
     console.log('✅ Database schema checked and updated.');
-  } finally {
-    client.release();
+  } catch (error) {
+    console.error('❌ Database connection failed:', error);
+    throw error;
   }
 };
 
@@ -152,15 +70,16 @@ const authenticateToken = (req, res, next) => {
 app.post('/api/auth/login', async (req, res) => {
   const { email, password } = req.body;
   try {
-    const result = await pool.query('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
-    const user = result.rows[0];
+    const user = await prisma.user.findUnique({
+      where: { email: email.toLowerCase() }
+    });
 
     if (!user || !(await bcrypt.compare(password, user.password))) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
     const token = jwt.sign({ id: user.id, email: user.email, role: user.role, name: user.name }, JWT_SECRET, { expiresIn: '7d' });
-    res.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role, bio: user.bio, instagram: user.instagram, tiktok: user.tiktok, profile_photo_url: user.profile_photo_url, photo_urls: user.photo_urls, services: user.services } });
+    res.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role, bio: user.bio, instagram: user.instagram, tiktok: user.tiktok, profilePhotoUrl: user.profilePhotoUrl, photoUrls: user.photoUrls, services: user.services } });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Login failed' });
@@ -169,14 +88,25 @@ app.post('/api/auth/login', async (req, res) => {
 
 app.get('/api/auth/me', authenticateToken, async (req, res) => {
   try {
-    const result = await pool.query(
-      'SELECT id, name, email, role, bio, instagram, tiktok, profile_photo_url, photo_urls, services FROM users WHERE id = $1',
-      [req.user.id]
-    );
-    if (!result.rows.length) {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        bio: true,
+        instagram: true,
+        tiktok: true,
+        profilePhotoUrl: true,
+        photoUrls: true,
+        services: true
+      }
+    });
+    if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
-    res.json({ user: result.rows[0] });
+    res.json({ user });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to load user profile' });
@@ -187,10 +117,29 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
 
 app.get('/api/barbers', async (req, res) => {
   try {
-    const result = await pool.query(
-      `SELECT id, name, role, bio, instagram, tiktok, profile_photo_url, photo_urls, services FROM users WHERE role <> 'boss' ORDER BY role DESC, name ASC`
-    );
-    res.json(result.rows);
+    const barbers = await prisma.user.findMany({
+      where: {
+        role: {
+          not: 'boss'
+        }
+      },
+      select: {
+        id: true,
+        name: true,
+        role: true,
+        bio: true,
+        instagram: true,
+        tiktok: true,
+        profilePhotoUrl: true,
+        photoUrls: true,
+        services: true
+      },
+      orderBy: [
+        { role: 'desc' },
+        { name: 'asc' }
+      ]
+    });
+    res.json(barbers);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to fetch barbers' });
@@ -209,13 +158,35 @@ app.post('/api/barbers', authenticateToken, async (req, res) => {
 
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
-    const result = await pool.query(
-      'INSERT INTO users (name, email, password, role, bio, instagram, tiktok, profile_photo_url, photo_urls, services) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id, name, email, role, bio, instagram, tiktok, profile_photo_url, photo_urls, services',
-      [name, email.toLowerCase(), hashedPassword, normalizedRole, bio || null, instagram || null, tiktok || null, profilePhotoUrl || null, photoUrls || null, services || null]
-    );
-    res.status(201).json(result.rows[0]);
+    const newBarber = await prisma.user.create({
+      data: {
+        name,
+        email: email.toLowerCase(),
+        password: hashedPassword,
+        role: normalizedRole,
+        bio: bio || null,
+        instagram: instagram || null,
+        tiktok: tiktok || null,
+        profilePhotoUrl: profilePhotoUrl || null,
+        photoUrls: photoUrls || [],
+        services: services || null
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        bio: true,
+        instagram: true,
+        tiktok: true,
+        profilePhotoUrl: true,
+        photoUrls: true,
+        services: true
+      }
+    });
+    res.status(201).json(newBarber);
   } catch (error) {
-    if (error.code === '23505') {
+    if (error.code === 'P2002') {
       return res.status(400).json({ error: 'Email already exists' });
     }
     console.error(error);
@@ -231,12 +202,22 @@ app.put('/api/barbers/:id', authenticateToken, async (req, res) => {
 
   const { bio, instagram, tiktok, profilePhotoUrl, photoUrls, services, role } = req.body;
   try {
-    const existingResult = await pool.query('SELECT role, bio, instagram, tiktok, profile_photo_url, photo_urls, services FROM users WHERE id = $1', [barberId]);
-    if (existingResult.rows.length === 0) {
+    const existingBarber = await prisma.user.findUnique({
+      where: { id: barberId },
+      select: {
+        role: true,
+        bio: true,
+        instagram: true,
+        tiktok: true,
+        profilePhotoUrl: true,
+        photoUrls: true,
+        services: true
+      }
+    });
+    if (!existingBarber) {
       return res.status(404).json({ error: 'Barber not found' });
     }
-    const existing = existingResult.rows[0];
-    const targetRole = existing.role;
+    const targetRole = existingBarber.role;
 
     if (req.user.id !== barberId && req.user.role !== 'boss' && req.user.role !== 'senior_barber') {
       return res.status(403).json({ error: 'Only a boss or the barber can update this profile' });
@@ -263,18 +244,33 @@ app.put('/api/barbers/:id', authenticateToken, async (req, res) => {
       return res.status(403).json({ error: 'You cannot change your own role' });
     }
 
-    const updatedBio = bio !== undefined ? bio : existing.bio;
-    const updatedInstagram = instagram !== undefined ? instagram : existing.instagram;
-    const updatedTiktok = tiktok !== undefined ? tiktok : existing.tiktok;
-    const updatedProfilePhotoUrl = profilePhotoUrl !== undefined ? profilePhotoUrl : existing.profile_photo_url;
-    const updatedPhotoUrls = photoUrls !== undefined ? photoUrls : existing.photo_urls;
-    const updatedServices = services !== undefined ? services : existing.services;
+    const updateData = {};
+    if (bio !== undefined) updateData.bio = bio;
+    if (instagram !== undefined) updateData.instagram = instagram;
+    if (tiktok !== undefined) updateData.tiktok = tiktok;
+    if (profilePhotoUrl !== undefined) updateData.profilePhotoUrl = profilePhotoUrl;
+    if (photoUrls !== undefined) updateData.photoUrls = photoUrls;
+    if (services !== undefined) updateData.services = services;
+    if (desiredRole !== targetRole) updateData.role = desiredRole;
 
-    const result = await pool.query(
-      'UPDATE users SET bio = $1, instagram = $2, tiktok = $3, profile_photo_url = $4, photo_urls = $5, services = $6, role = $7 WHERE id = $8 RETURNING id, name, email, role, bio, instagram, tiktok, profile_photo_url, photo_urls, services',
-      [updatedBio || null, updatedInstagram || null, updatedTiktok || null, updatedProfilePhotoUrl || null, updatedPhotoUrls || null, updatedServices || null, desiredRole, barberId]
-    );
-    res.json(result.rows[0]);
+    const updatedBarber = await prisma.user.update({
+      where: { id: barberId },
+      data: updateData,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        bio: true,
+        instagram: true,
+        tiktok: true,
+        profilePhotoUrl: true,
+        photoUrls: true,
+        services: true
+      }
+    });
+
+    res.json(updatedBarber);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to update barber profile' });
@@ -292,12 +288,16 @@ app.delete('/api/barbers/:id', authenticateToken, async (req, res) => {
   }
 
   try {
-    const result = await pool.query(
-      'DELETE FROM users WHERE id = $1 AND role IN ($2, $3) RETURNING id',
-      [barberId, 'barber', 'junior_barber']
-    );
+    const deletedBarber = await prisma.user.deleteMany({
+      where: {
+        id: barberId,
+        role: {
+          in: ['barber', 'junior_barber']
+        }
+      }
+    });
 
-    if (result.rows.length === 0) {
+    if (deletedBarber.count === 0) {
       return res.status(404).json({ error: 'Barber not found or cannot fire this user' });
     }
 
