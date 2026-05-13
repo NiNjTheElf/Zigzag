@@ -49,6 +49,22 @@ pool.connect((err, client, release) => {
 const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret_key_change_in_production';
 const SLOT_TIMES = ['10:00 AM', '11:30 AM', '1:00 PM', '2:30 PM', '4:00 PM', '5:30 PM'];
 
+// Helper function to normalize user object
+function normalizeUser(dbUser) {
+  return {
+    id: dbUser.id,
+    name: dbUser.name,
+    email: dbUser.email,
+    role: dbUser.role,
+    bio: dbUser.bio,
+    instagram: dbUser.instagram,
+    tiktok: dbUser.tiktok,
+    profilePhotoUrl: dbUser.profile_photo_url,
+    photoUrls: dbUser.photo_urls,
+    services: dbUser.services
+  };
+}
+
 // Auth middleware
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
@@ -71,7 +87,7 @@ app.post('/api/auth/login', async (req, res) => {
   const { email, password } = req.body;
   try {
     // Correct SQL query
-    const result = await pool.query('SELECT * FROM users WHERE LOWER(email) = $1', [email.toLowerCase()]);
+    const result = await pool.query('SELECT * FROM "users" WHERE LOWER(email) = $1', [email.toLowerCase()]);
     const user = result.rows[0];
 
     if (!user || !(await bcrypt.compare(password, user.password))) {
@@ -100,24 +116,14 @@ app.post('/api/auth/login', async (req, res) => {
 
 app.get('/api/auth/me', authenticateToken, async (req, res) => {
   try {
-    const user = await pool.query.user.findUnique({
-      where: { id: req.user.id },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        bio: true,
-        instagram: true,
-        tiktok: true,
-        profilePhotoUrl: true,
-        photoUrls: true,
-        services: true
-      }
-    });
-    if (!user) {
+    const result = await pool.query(
+      'SELECT id, name, email, role, bio, instagram, tiktok, profile_photo_url, photo_urls, services FROM "users" WHERE id = $1',
+      [req.user.id]
+    );
+    if (result.rows.length === 0) {
       return res.status(404).json({ error: 'User not found' });
     }
+    const user = normalizeUser(result.rows[0]);
     res.json({ user });
   } catch (error) {
     console.error(error);
@@ -131,11 +137,12 @@ app.get('/api/barbers', async (req, res) => {
   try {
     const query = `
       SELECT id, name, role, bio, instagram, tiktok, profile_photo_url, photo_urls, services 
-      FROM users 
+      FROM "users" 
       WHERE role != 'BOSS'
     `;
     const result = await pool.query(query);
-    res.json(result.rows);
+    const normalizedBarbers = result.rows.map(normalizeUser);
+    res.json(normalizedBarbers);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to fetch barbers' });
@@ -152,7 +159,7 @@ app.post('/api/barbers', authenticateToken, async (req, res) => {
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
     const query = `
-      INSERT INTO users (name, email, password, role, bio, instagram, tiktok, profile_photo_url, photo_urls, services)
+      INSERT INTO "users" (name, email, password, role, bio, instagram, tiktok, profile_photo_url, photo_urls, services)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING id, name, email, role`;
     
@@ -177,21 +184,14 @@ app.put('/api/barbers/:id', authenticateToken, async (req, res) => {
 
   const { bio, instagram, tiktok, profilePhotoUrl, photoUrls, services, role } = req.body;
   try {
-    const existingBarber = await pool.query.user.findUnique({
-      where: { id: barberId },
-      select: {
-        role: true,
-        bio: true,
-        instagram: true,
-        tiktok: true,
-        profilePhotoUrl: true,
-        photoUrls: true,
-        services: true
-      }
-    });
-    if (!existingBarber) {
+    const existingResult = await pool.query(
+      'SELECT role, bio, instagram, tiktok, profile_photo_url, photo_urls, services FROM "users" WHERE id = $1',
+      [barberId]
+    );
+    if (existingResult.rows.length === 0) {
       return res.status(404).json({ error: 'Barber not found' });
     }
+    const existingBarber = existingResult.rows[0];
     const targetRole = existingBarber.role;
 
     if (req.user.id !== barberId && req.user.role !== 'BOSS' && req.user.role !== 'SENIOR_BARBER') {
@@ -219,31 +219,47 @@ app.put('/api/barbers/:id', authenticateToken, async (req, res) => {
       return res.status(403).json({ error: 'You cannot change your own role' });
     }
 
-    const updateData = {};
-    if (bio !== undefined) updateData.bio = bio;
-    if (instagram !== undefined) updateData.instagram = instagram;
-    if (tiktok !== undefined) updateData.tiktok = tiktok;
-    if (profilePhotoUrl !== undefined) updateData.profilePhotoUrl = profilePhotoUrl;
-    if (photoUrls !== undefined) updateData.photoUrls = photoUrls;
-    if (services !== undefined) updateData.services = services;
-    if (desiredRole !== targetRole) updateData.role = desiredRole;
+    const updates = [];
+    const values = [];
+    let paramCount = 1;
 
-    const updatedBarber = await pool.query.user.update({
-      where: { id: barberId },
-      data: updateData,
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        bio: true,
-        instagram: true,
-        tiktok: true,
-        profilePhotoUrl: true,
-        photoUrls: true,
-        services: true
-      }
-    });
+    if (bio !== undefined) {
+      updates.push(`bio = $${paramCount++}`);
+      values.push(bio);
+    }
+    if (instagram !== undefined) {
+      updates.push(`instagram = $${paramCount++}`);
+      values.push(instagram);
+    }
+    if (tiktok !== undefined) {
+      updates.push(`tiktok = $${paramCount++}`);
+      values.push(tiktok);
+    }
+    if (profilePhotoUrl !== undefined) {
+      updates.push(`profile_photo_url = $${paramCount++}`);
+      values.push(profilePhotoUrl);
+    }
+    if (photoUrls !== undefined) {
+      updates.push(`photo_urls = $${paramCount++}`);
+      values.push(photoUrls);
+    }
+    if (services !== undefined) {
+      updates.push(`services = $${paramCount++}`);
+      values.push(services);
+    }
+    if (desiredRole !== targetRole) {
+      updates.push(`role = $${paramCount++}`);
+      values.push(desiredRole);
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No fields to update' });
+    }
+
+    values.push(barberId);
+    const updateQuery = `UPDATE "users" SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING id, name, email, role, bio, instagram, tiktok, profile_photo_url, photo_urls, services`;
+    const updatedResult = await pool.query(updateQuery, values);
+    const updatedBarber = normalizeUser(updatedResult.rows[0]);
 
     res.json(updatedBarber);
   } catch (error) {
@@ -263,16 +279,12 @@ app.delete('/api/barbers/:id', authenticateToken, async (req, res) => {
   }
 
   try {
-    const deletedBarber = await pool.query.user.deleteMany({
-      where: {
-        id: barberId,
-        role: {
-          in: ['barber', 'junior_barber']
-        }
-      }
-    });
+    const result = await pool.query(
+      'DELETE FROM "users" WHERE id = $1 AND role IN ($2, $3) RETURNING id',
+      [barberId, 'BARBER', 'JUNIOR_BARBER']
+    );
 
-    if (deletedBarber.count === 0) {
+    if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Barber not found or cannot fire this user' });
     }
 
@@ -307,7 +319,7 @@ const normalizeAppointmentRecord = (row) => ({
 app.get('/api/appointments', authenticateToken, async (req, res) => {
   const { date, barberId } = req.query;
   try {
-    let query = 'SELECT * FROM appointments';
+    let query = 'SELECT * FROM "appointments"';
     const params = [];
     const conditions = [];
 
@@ -345,7 +357,7 @@ app.get('/api/appointments/month/:year/:month', authenticateToken, async (req, r
     const startDate = formatDateOnly(new Date(year, month - 1, 1));
     const endDate = formatDateOnly(new Date(year, month, 0));
 
-    let query = 'SELECT * FROM appointments WHERE appointment_date BETWEEN $1 AND $2';
+    let query = 'SELECT * FROM "appointments" WHERE "appointment_date" BETWEEN $1 AND $2';
     const params = [startDate, endDate];
 
     if (req.user.role !== 'BOSS') {
@@ -371,14 +383,14 @@ app.get('/api/appointments/available', async (req, res) => {
   try {
     // Get booked slots
     const bookedResult = await pool.query(
-      'SELECT appointment_time FROM appointments WHERE barber_id = $1 AND appointment_date = $2',
+      'SELECT "appointment_time" FROM "appointments" WHERE "barber_id" = $1 AND "appointment_date" = $2',
       [parseInt(barberId), date]
     );
     const bookedTimes = bookedResult.rows.map(row => row.appointment_time);
 
     // Check day offs
     const dayOffResult = await pool.query(
-      'SELECT * FROM day_offs WHERE barber_id = $1 AND (day_off_date = $2 OR (is_recurring = true AND recurring_day_of_week = $3))',
+      'SELECT * FROM "day_offs" WHERE "barber_id" = $1 AND ("day_off_date" = $2 OR ("is_recurring" = true AND "recurring_day_of_week" = $3))',
       [parseInt(barberId), date, parseDateString(date).getDay()]
     );
 
@@ -398,7 +410,7 @@ app.post('/api/appointments', async (req, res) => {
   const { barberId, date, time, clientName, clientPhone, serviceType } = req.body;
   try {
     const checkDayOff = await pool.query(
-      'SELECT * FROM day_offs WHERE barber_id = $1 AND (day_off_date = $2 OR (is_recurring = true AND recurring_day_of_week = $3))',
+      'SELECT * FROM "day_offs" WHERE "barber_id" = $1 AND ("day_off_date" = $2 OR ("is_recurring" = true AND "recurring_day_of_week" = $3))',
       [parseInt(barberId), date, parseDateString(date).getDay()]
     );
 
@@ -407,7 +419,7 @@ app.post('/api/appointments', async (req, res) => {
     }
 
     const checkBooked = await pool.query(
-      'SELECT id FROM appointments WHERE barber_id = $1 AND appointment_date = $2 AND appointment_time = $3',
+      'SELECT "id" FROM "appointments" WHERE "barber_id" = $1 AND "appointment_date" = $2 AND "appointment_time" = $3',
       [parseInt(barberId), date, time]
     );
 
@@ -416,7 +428,7 @@ app.post('/api/appointments', async (req, res) => {
     }
 
     const result = await pool.query(
-      'INSERT INTO appointments (barber_id, client_name, client_phone, appointment_date, appointment_time, service_type) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+      'INSERT INTO "appointments" ("barber_id", "client_name", "client_phone", "appointment_date", "appointment_time", "service_type") VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
       [parseInt(barberId), clientName, clientPhone, date, time, serviceType || 'Haircut']
     );
 
@@ -458,7 +470,7 @@ app.post('/api/appointments/:id/move-next-day', authenticateToken, async (req, r
     const nextDate = formatDateOnly(currentDate);
 
     const dayOffResult = await pool.query(
-      'SELECT * FROM day_offs WHERE barber_id = $1 AND (day_off_date = $2 OR (is_recurring = true AND recurring_day_of_week = $3))',
+      'SELECT * FROM "day_offs" WHERE "barber_id" = $1 AND ("day_off_date" = $2 OR ("is_recurring" = true AND "recurring_day_of_week" = $3))',
       [appointment.barber_id, nextDate, parseDateString(nextDate).getDay()]
     );
 
@@ -476,7 +488,7 @@ app.post('/api/appointments/:id/move-next-day', authenticateToken, async (req, r
     }
 
     const updateResult = await pool.query(
-      'UPDATE appointments SET appointment_date = $1 WHERE id = $2 RETURNING *',
+      'UPDATE "appointments" SET "appointment_date" = $1 WHERE "id" = $2 RETURNING *',
       [nextDate, appointmentId]
     );
 
@@ -496,7 +508,7 @@ app.post('/api/appointments/:id/reschedule', authenticateToken, async (req, res)
   }
 
   try {
-    const appointmentResult = await pool.query('SELECT * FROM appointments WHERE id = $1', [appointmentId]);
+    const appointmentResult = await pool.query('SELECT * FROM "appointments" WHERE "id" = $1', [appointmentId]);
     if (appointmentResult.rows.length === 0) {
       return res.status(404).json({ error: 'Appointment not found' });
     }
@@ -507,7 +519,7 @@ app.post('/api/appointments/:id/reschedule', authenticateToken, async (req, res)
     }
 
     const dayOffResult = await pool.query(
-      'SELECT * FROM day_offs WHERE barber_id = $1 AND (day_off_date = $2 OR (is_recurring = true AND recurring_day_of_week = $3))',
+      'SELECT * FROM "day_offs" WHERE "barber_id" = $1 AND ("day_off_date" = $2 OR ("is_recurring" = true AND "recurring_day_of_week" = $3))',
       [appointment.barber_id, date, parseDateString(date).getDay()]
     );
 
@@ -516,7 +528,7 @@ app.post('/api/appointments/:id/reschedule', authenticateToken, async (req, res)
     }
 
     const bookedResult = await pool.query(
-      'SELECT id FROM appointments WHERE barber_id = $1 AND appointment_date = $2 AND appointment_time = $3 AND id != $4',
+      'SELECT "id" FROM "appointments" WHERE "barber_id" = $1 AND "appointment_date" = $2 AND "appointment_time" = $3 AND "id" != $4',
       [appointment.barber_id, date, time, appointmentId]
     );
 
@@ -525,7 +537,7 @@ app.post('/api/appointments/:id/reschedule', authenticateToken, async (req, res)
     }
 
     const updateResult = await pool.query(
-      'UPDATE appointments SET appointment_date = $1, appointment_time = $2 WHERE id = $3 RETURNING *',
+      'UPDATE "appointments" SET "appointment_date" = $1, "appointment_time" = $2 WHERE "id" = $3 RETURNING *',
       [date, time, appointmentId]
     );
 
@@ -543,7 +555,7 @@ app.delete('/api/appointments/:id', authenticateToken, async (req, res) => {
   }
 
   try {
-    const appointmentResult = await pool.query('SELECT barber_id FROM appointments WHERE id = $1', [appointmentId]);
+    const appointmentResult = await pool.query('SELECT "barber_id" FROM "appointments" WHERE "id" = $1', [appointmentId]);
     if (appointmentResult.rows.length === 0) {
       return res.status(404).json({ error: 'Appointment not found' });
     }
@@ -553,7 +565,7 @@ app.delete('/api/appointments/:id', authenticateToken, async (req, res) => {
       return res.status(403).json({ error: 'Access denied to cancel this appointment' });
     }
 
-    const deleteResult = await pool.query('DELETE FROM appointments WHERE id = $1 RETURNING id', [appointmentId]);
+    const deleteResult = await pool.query('DELETE FROM "appointments" WHERE "id" = $1 RETURNING "id"', [appointmentId]);
     if (deleteResult.rows.length === 0) {
       return res.status(404).json({ error: 'Appointment not found' });
     }
@@ -578,7 +590,7 @@ app.post('/api/upload', authenticateToken, upload.array('photos', 12), (req, res
 app.get('/api/dayoffs', authenticateToken, async (req, res) => {
   const { barberId, year, month } = req.query;
   try {
-    let query = 'SELECT * FROM day_offs WHERE 1=1';
+    let query = 'SELECT * FROM "day_offs" WHERE 1=1';
     const params = [];
 
     // Only boss can see all day offs. Senior barbers and regular barbers only see their own
@@ -648,8 +660,8 @@ app.delete('/api/dayoffs/:id', authenticateToken, async (req, res) => {
 
   try {
     const query = (req.user.role === 'boss' || req.user.role === 'senior_barber')
-      ? 'DELETE FROM day_offs WHERE id = $1 RETURNING id'
-      : 'DELETE FROM day_offs WHERE id = $1 AND barber_id = $2 RETURNING id';
+      ? 'DELETE FROM "day_offs" WHERE "id" = $1 RETURNING "id"'
+      : 'DELETE FROM "day_offs" WHERE "id" = $1 AND "barber_id" = $2 RETURNING "id"';
     const params = (req.user.role === 'boss' || req.user.role === 'senior_barber')
       ? [parseInt(id)]
       : [parseInt(id), req.user.id];
@@ -701,7 +713,7 @@ app.get('/api/reviews/average/:barberId', async (req, res) => {
   const { barberId } = req.params;
   try {
     const result = await pool.query(
-      'SELECT ROUND(AVG(rating)::numeric, 1) as average, COUNT(*) as count FROM reviews WHERE barber_id = $1',
+      'SELECT ROUND(AVG("rating")::numeric, 1) as average, COUNT(*) as count FROM "reviews" WHERE "barber_id" = $1',
       [parseInt(barberId)]
     );
     const row = result.rows[0];
@@ -729,7 +741,7 @@ app.post('/api/reviews', async (req, res) => {
   try {
     // Check if the client has an appointment with this barber
     const appointmentCheck = await pool.query(
-      'SELECT id FROM appointments WHERE barber_id = $1 AND client_phone = $2',
+      'SELECT "id" FROM "appointments" WHERE "barber_id" = $1 AND "client_phone" = $2',
       [parseInt(barberId), clientPhone]
     );
 
