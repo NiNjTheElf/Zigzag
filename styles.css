@@ -715,7 +715,7 @@ button {
 .gallery-image {
   width: 100%;
   border-radius: 8px;
-  background: rgba(236, 232, 221, 0.065);
+  background: #ADD8E6;
   border: 1px solid rgba(236, 232, 221, 0.11);
 }
 
@@ -795,9 +795,8 @@ button {
 .gallery-image {
   min-height: 250px;
   height: 250px;
-  object-fit: cover;
-  background-size: cover;
-  background-position: center;
+  background: #ADD8E6;
+  border-radius: 8px;
 }
 
 .site-footer {
@@ -2096,9 +2095,8 @@ body::after {
 }
 
 .booking-promo {
-  background:
-    linear-gradient(90deg, rgba(244, 244, 240, 0.92), rgba(244, 244, 240, 0.62)),
-    url('assets/zigzag-interior.avif') center / cover;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.78), transparent 82%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
   border-color: var(--line);
 }
 
