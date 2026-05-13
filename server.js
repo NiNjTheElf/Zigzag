@@ -2,14 +2,12 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
-const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const cors = require('cors');
 require('dotenv').config();
 
 const app = express();
-const prisma = new PrismaClient();
 
 const uploadsDir = path.join(__dirname, 'uploads');
 fs.mkdirSync(uploadsDir, { recursive: true });
@@ -29,22 +27,24 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage, limits: { fileSize: 8 * 1024 * 1024 } });
 
-const ensureSchema = async () => {
-  // Prisma handles schema management automatically
-  console.log('✅ Prisma client initialized successfully');
-};
+const { Pool } = require('pg');
 
-const initializeDatabase = async () => {
-  try {
-    await prisma.$connect();
-    console.log('✅ Connected to database successfully via Prisma.');
-    await ensureSchema();
-    console.log('✅ Database schema checked and updated.');
-  } catch (error) {
-    console.error('❌ Database connection failed:', error);
-    throw error;
+// Initialize the Postgres connection pool
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false // This is required for Supabase
   }
-};
+});
+
+// A simple way to check if it's working
+pool.connect((err, client, release) => {
+  if (err) {
+    return console.error('❌ Error acquiring client', err.stack);
+  }
+  console.log('✅ Connected to Supabase via Raw SQL');
+  release();
+});
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret_key_change_in_production';
 const SLOT_TIMES = ['10:00 AM', '11:30 AM', '1:00 PM', '2:30 PM', '4:00 PM', '5:30 PM'];
@@ -70,16 +70,28 @@ const authenticateToken = (req, res, next) => {
 app.post('/api/auth/login', async (req, res) => {
   const { email, password } = req.body;
   try {
-    const user = await prisma.user.findUnique({
-      where: { email: email.toLowerCase() }
-    });
+    // Correct SQL query
+    const result = await pool.query('SELECT * FROM users WHERE LOWER(email) = $1', [email.toLowerCase()]);
+    const user = result.rows[0];
 
     if (!user || !(await bcrypt.compare(password, user.password))) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
     const token = jwt.sign({ id: user.id, email: user.email, role: user.role, name: user.name }, JWT_SECRET, { expiresIn: '7d' });
-    res.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role, bio: user.bio, instagram: user.instagram, tiktok: user.tiktok, profilePhotoUrl: user.profilePhotoUrl, photoUrls: user.photoUrls, services: user.services } });
+    
+    // Use snake_case names from the database result
+    res.json({ 
+      token, 
+      user: { 
+        id: user.id, 
+        name: user.name, 
+        email: user.email, 
+        role: user.role, 
+        profilePhotoUrl: user.profile_photo_url, 
+        photoUrls: user.photo_urls 
+      } 
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Login failed' });
@@ -88,7 +100,7 @@ app.post('/api/auth/login', async (req, res) => {
 
 app.get('/api/auth/me', authenticateToken, async (req, res) => {
   try {
-    const user = await prisma.user.findUnique({
+    const user = await pool.query.user.findUnique({
       where: { id: req.user.id },
       select: {
         id: true,
@@ -117,29 +129,13 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
 
 app.get('/api/barbers', async (req, res) => {
   try {
-    const barbers = await prisma.user.findMany({
-      where: {
-        role: {
-          not: 'boss'
-        }
-      },
-      select: {
-        id: true,
-        name: true,
-        role: true,
-        bio: true,
-        instagram: true,
-        tiktok: true,
-        profilePhotoUrl: true,
-        photoUrls: true,
-        services: true
-      },
-      orderBy: [
-        { role: 'desc' },
-        { name: 'asc' }
-      ]
-    });
-    res.json(barbers);
+    const query = `
+      SELECT id, name, role, bio, instagram, tiktok, profile_photo_url, photo_urls, services 
+      FROM users 
+      WHERE role != 'BOSS'
+    `;
+    const result = await pool.query(query);
+    res.json(result.rows);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to fetch barbers' });
@@ -147,50 +143,29 @@ app.get('/api/barbers', async (req, res) => {
 });
 
 app.post('/api/barbers', authenticateToken, async (req, res) => {
-  // Allow boss and senior_barber to create staff accounts
-  if (req.user.role !== 'boss' && req.user.role !== 'senior_barber') {
-    return res.status(403).json({ error: 'Only boss and senior barber can create staff accounts' });
+  if (req.user.role !== 'BOSS' && req.user.role !== 'SENIOR_BARBER') {
+    return res.status(403).json({ error: 'Access denied' });
   }
 
   const { name, email, password, role, bio, instagram, tiktok, profilePhotoUrl, photoUrls, services } = req.body;
-  const validRoles = ['boss', 'senior_barber', 'barber', 'junior_barber'];
-  const normalizedRole = validRoles.includes(role) ? role : 'barber';
-
+  
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
-    const newBarber = await prisma.user.create({
-      data: {
-        name,
-        email: email.toLowerCase(),
-        password: hashedPassword,
-        role: normalizedRole,
-        bio: bio || null,
-        instagram: instagram || null,
-        tiktok: tiktok || null,
-        profilePhotoUrl: profilePhotoUrl || null,
-        photoUrls: photoUrls || [],
-        services: services || null
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        bio: true,
-        instagram: true,
-        tiktok: true,
-        profilePhotoUrl: true,
-        photoUrls: true,
-        services: true
-      }
-    });
-    res.status(201).json(newBarber);
+    const query = `
+      INSERT INTO users (name, email, password, role, bio, instagram, tiktok, profile_photo_url, photo_urls, services)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      RETURNING id, name, email, role`;
+    
+    const values = [name, email.toLowerCase(), hashedPassword, role, bio, instagram, tiktok, profilePhotoUrl, photoUrls || [], services];
+    const result = await pool.query(query, values);
+    
+    res.status(201).json(result.rows[0]);
   } catch (error) {
-    if (error.code === 'P2002') {
+    if (error.code === '23505') { // 23505 is the SQL code for Unique Violation (Duplicate Email)
       return res.status(400).json({ error: 'Email already exists' });
     }
     console.error(error);
-    res.status(500).json({ error: 'Failed to create staff account' });
+    res.status(500).json({ error: 'Failed to create account' });
   }
 });
 
@@ -202,7 +177,7 @@ app.put('/api/barbers/:id', authenticateToken, async (req, res) => {
 
   const { bio, instagram, tiktok, profilePhotoUrl, photoUrls, services, role } = req.body;
   try {
-    const existingBarber = await prisma.user.findUnique({
+    const existingBarber = await pool.query.user.findUnique({
       where: { id: barberId },
       select: {
         role: true,
@@ -219,19 +194,19 @@ app.put('/api/barbers/:id', authenticateToken, async (req, res) => {
     }
     const targetRole = existingBarber.role;
 
-    if (req.user.id !== barberId && req.user.role !== 'boss' && req.user.role !== 'senior_barber') {
+    if (req.user.id !== barberId && req.user.role !== 'BOSS' && req.user.role !== 'SENIOR_BARBER') {
       return res.status(403).json({ error: 'Only a boss or the barber can update this profile' });
     }
 
     let desiredRole = targetRole;
-    const validRoles = ['boss', 'senior_barber', 'barber', 'junior_barber'];
+    const validRoles = ['BOSS', 'SENIOR_BARBER', 'BARBER', 'JUNIOR_BARBER'];
 
     if (role && role !== targetRole) {
-      if (req.user.role === 'boss') {
+      if (req.user.role === 'BOSS') {
         desiredRole = validRoles.includes(role) ? role : targetRole;
-      } else if (req.user.role === 'senior_barber') {
-        if (targetRole === 'junior_barber' && role === 'barber') {
-          desiredRole = 'barber';
+      } else if (req.user.role === 'SENIOR_BARBER') {
+        if (targetRole === 'JUNIOR_BARBER' && role === 'BARBER') {
+          desiredRole = 'BARBER';
         } else {
           return res.status(403).json({ error: 'Senior barber can only change junior barber to regular barber' });
         }
@@ -253,7 +228,7 @@ app.put('/api/barbers/:id', authenticateToken, async (req, res) => {
     if (services !== undefined) updateData.services = services;
     if (desiredRole !== targetRole) updateData.role = desiredRole;
 
-    const updatedBarber = await prisma.user.update({
+    const updatedBarber = await pool.query.user.update({
       where: { id: barberId },
       data: updateData,
       select: {
@@ -278,7 +253,7 @@ app.put('/api/barbers/:id', authenticateToken, async (req, res) => {
 });
 
 app.delete('/api/barbers/:id', authenticateToken, async (req, res) => {
-  if (req.user.role !== 'boss' && req.user.role !== 'senior_barber') {
+  if (req.user.role !== 'BOSS' && req.user.role !== 'SENIOR_BARBER') {
     return res.status(403).json({ error: 'Only boss or senior barber can fire barbers' });
   }
 
@@ -288,7 +263,7 @@ app.delete('/api/barbers/:id', authenticateToken, async (req, res) => {
   }
 
   try {
-    const deletedBarber = await prisma.user.deleteMany({
+    const deletedBarber = await pool.query.user.deleteMany({
       where: {
         id: barberId,
         role: {
@@ -337,7 +312,7 @@ app.get('/api/appointments', authenticateToken, async (req, res) => {
     const conditions = [];
 
     // Only boss can see all appointments. Senior barbers and regular barbers only see their own
-    if (req.user.role !== 'boss') {
+    if (req.user.role !== 'BOSS') {
       conditions.push('barber_id = $' + (params.length + 1));
       params.push(req.user.id);
     } else if (barberId) {
@@ -373,7 +348,7 @@ app.get('/api/appointments/month/:year/:month', authenticateToken, async (req, r
     let query = 'SELECT * FROM appointments WHERE appointment_date BETWEEN $1 AND $2';
     const params = [startDate, endDate];
 
-    if (req.user.role !== 'boss') {
+    if (req.user.role !== 'BOSS') {
       query += ' AND barber_id = $3';
       params.push(req.user.id);
     } else if (barberId) {
@@ -474,7 +449,7 @@ app.post('/api/appointments/:id/move-next-day', authenticateToken, async (req, r
     }
 
     const appointment = appointmentResult.rows[0];
-    if (req.user.role !== 'boss' && req.user.role !== 'senior_barber' && appointment.barber_id !== req.user.id) {
+    if (req.user.role !== 'BOSS' && req.user.role !== 'SENIOR_BARBER' && appointment.barber_id !== req.user.id) {
       return res.status(403).json({ error: 'Access denied to move this appointment' });
     }
 
@@ -527,7 +502,7 @@ app.post('/api/appointments/:id/reschedule', authenticateToken, async (req, res)
     }
 
     const appointment = appointmentResult.rows[0];
-    if (req.user.role !== 'boss' && req.user.role !== 'senior_barber' && appointment.barber_id !== req.user.id) {
+    if (req.user.role !== 'BOSS' && req.user.role !== 'SENIOR_BARBER' && appointment.barber_id !== req.user.id) {
       return res.status(403).json({ error: 'Access denied to reschedule this appointment' });
     }
 
@@ -574,7 +549,7 @@ app.delete('/api/appointments/:id', authenticateToken, async (req, res) => {
     }
 
     const appointment = appointmentResult.rows[0];
-    if (req.user.role !== 'boss' && req.user.role !== 'senior_barber' && appointment.barber_id !== req.user.id) {
+    if (req.user.role !== 'BOSS' && req.user.role !== 'SENIOR_BARBER' && appointment.barber_id !== req.user.id) {
       return res.status(403).json({ error: 'Access denied to cancel this appointment' });
     }
 
@@ -607,7 +582,7 @@ app.get('/api/dayoffs', authenticateToken, async (req, res) => {
     const params = [];
 
     // Only boss can see all day offs. Senior barbers and regular barbers only see their own
-    if (req.user.role !== 'boss') {
+    if (req.user.role !== 'BOSS') {
       query += ' AND barber_id = $' + (params.length + 1);
       params.push(req.user.id);
     } else if (barberId) {
@@ -790,18 +765,10 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
-const startServer = async () => {
-  try {
-    await initializeDatabase();
-    const PORT = process.env.PORT || 3000;
-    app.listen(PORT, () => {
-      console.log(`✨ ZigZag Hairplace server running on http://localhost:${PORT}`);
-      console.log('📦 Database: PostgreSQL');
-    });
-  } catch (err) {
-    console.error('❌ Server startup failed:', err);
-    process.exit(1);
-  }
-};
+// Simplified Start Logic
+const PORT = process.env.PORT || 3000;
 
-startServer();
+app.listen(PORT, () => {
+  console.log(`✨ ZigZag Hairplace server running on http://localhost:${PORT}`);
+  console.log('📦 Database: PostgreSQL (Connected via Pool)');
+});

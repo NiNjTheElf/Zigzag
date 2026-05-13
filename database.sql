@@ -1,63 +1,69 @@
--- PostgreSQL Schema for ZigZag Hairplace
--- Run this file to set up the database
+-- 1. Create the User Role Enum
+CREATE TYPE "UserRole" AS ENUM ('BOSS', 'SENIOR_BARBER', 'BARBER', 'JUNIOR_BARBER');
 
-CREATE DATABASE zigzag_hairplace;
-
--- Connect to the new database
-\c zigzag_hairplace;
-
--- Users table (boss and barbers)
-CREATE TABLE users (
-  id SERIAL PRIMARY KEY,
-  name VARCHAR(255) NOT NULL,
-  email VARCHAR(255) UNIQUE NOT NULL,
-  password VARCHAR(255) NOT NULL,
-  role VARCHAR(20) NOT NULL CHECK (role IN ('boss', 'senior_barber', 'barber', 'junior_barber')),
-  bio TEXT,
-  instagram VARCHAR(255),
-  tiktok VARCHAR(255),
-  profile_photo_url TEXT,
-  photo_urls TEXT[],
-  services TEXT,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+-- 2. Create the Users table
+CREATE TABLE IF NOT EXISTS "users" (
+    "id" SERIAL PRIMARY KEY,
+    "name" TEXT NOT NULL,
+    "email" TEXT UNIQUE NOT NULL,
+    "password" TEXT NOT NULL,
+    "role" "UserRole" NOT NULL DEFAULT 'BARBER',
+    "bio" TEXT,
+    "instagram" TEXT,
+    "tiktok" TEXT,
+    "profile_photo_url" TEXT,
+    "photo_urls" TEXT[] DEFAULT '{}',
+    "services" TEXT,
+    "created_at" TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Appointments table
-CREATE TABLE appointments (
-  id SERIAL PRIMARY KEY,
-  barber_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  client_name VARCHAR(255) NOT NULL,
-  client_phone VARCHAR(20) NOT NULL,
-  appointment_date DATE NOT NULL,
-  appointment_time VARCHAR(10) NOT NULL,
-  service_type VARCHAR(255),
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE(barber_id, appointment_date, appointment_time)
+-- 3. Create the Appointments table
+CREATE TABLE IF NOT EXISTS "appointments" (
+    "id" SERIAL PRIMARY KEY,
+    "barber_id" INTEGER REFERENCES "users"("id") ON DELETE SET NULL,
+    "client_name" TEXT,
+    "client_phone" TEXT,
+    "appointment_date" DATE,
+    "appointment_time" TEXT,
+    "service_type" TEXT,
+    "created_at" TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Day-offs table (supports recurring)
-CREATE TABLE day_offs (
-  id SERIAL PRIMARY KEY,
-  barber_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-  day_off_date DATE NOT NULL,
-  is_recurring BOOLEAN DEFAULT FALSE,
-  recurring_day_of_week INTEGER CHECK (recurring_day_of_week BETWEEN 0 AND 6),
-  notes VARCHAR(255),
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+-- 4. Create the Day Offs table
+CREATE TABLE IF NOT EXISTS "day_offs" (
+    "id" SERIAL PRIMARY KEY,
+    "barber_id" INTEGER REFERENCES "users"("id") ON DELETE SET NULL,
+    "day_off_date" DATE,
+    "is_recurring" BOOLEAN DEFAULT FALSE,
+    "recurring_day_of_week" INTEGER,
+    "notes" TEXT,
+    "created_at" TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Indexes for faster queries
-CREATE INDEX idx_appointments_barber_date ON appointments(barber_id, appointment_date);
-CREATE INDEX idx_dayoffs_barber_date ON day_offs(barber_id, day_off_date);
-CREATE INDEX idx_appointments_date ON appointments(appointment_date);
+-- 5. Create the Reviews table
+CREATE TABLE IF NOT EXISTS "reviews" (
+    "id" SERIAL PRIMARY KEY,
+    "barber_id" INTEGER NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+    "client_name" TEXT,
+    "client_phone" TEXT,
+    "reviewer_name" TEXT,
+    "reviewer_phone" TEXT,
+    "rating" INTEGER NOT NULL,
+    "comment" TEXT,
+    "review_text" TEXT,
+    "created_at" TIMESTAMPTZ DEFAULT NOW()
+);
 
--- Insert default users
-INSERT INTO users (name, email, password, role) VALUES
-  ('ZigZag Boss', 'boss@zigzag.com', '$2a$10$ZQIPoLW9k43OdCYADIN3L.FPO8eMClEevulVoSlG19QYDSqU9FLL.', 'boss'),
-  ('Alex Mercer', 'alex@zigzag.com', '$2a$10$peowVLs8e7k42yYXuBtPwOFnWy.PYQotK5kzYQLJtB10UJQuzFP4m', 'barber'),
-  ('Maya Lane', 'maya@zigzag.com', '$2a$10$6fExTKbH9KXG1K3D.FdhL.W46yJqdn9aOG.DfnMzOLTRK9Ad.WvKS', 'barber');
+-- 6. Insert default users
+INSERT INTO "users" ("name", "email", "password", "role") VALUES
+  ('ZigZag Boss', 'boss@zigzag.com', '$2a$10$ZQIPoLW9k43OdCYADIN3L.FPO8eMClEevulVoSlG19QYDSqU9FLL.', 'BOSS'),
+  ('Alex Mercer', 'alex@zigzag.com', '$2a$10$peowVLs8e7k42yYXuBtPwOFnWy.PYQotK5kzYQLJtB10UJQuzFP4m', 'BARBER'),
+  ('Maya Lane', 'maya@zigzag.com', '$2a$10$6fExTKbH9KXG1K3D.FdhL.W46yJqdn9aOG.DfnMzOLTRK9Ad.WvKS', 'BARBER'),
+  ('Marcus Stone', 'marcus@zigzag.com', '$2a$10$X8vN4kM2zY9pR3sL7tQ1H.uWj5PmKnD2bE6cF4hG8iJ1lO0aB2C3Y', 'SENIOR_BARBER')
+ON CONFLICT ("email") DO NOTHING;
 
 -- Note: Default passwords are hashed versions of:
 -- Boss: Boss123!
 -- Alex: Alex2026!
 -- Maya: Maya2026!
+-- Marcus: MarCus2026!

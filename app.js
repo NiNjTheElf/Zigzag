@@ -293,7 +293,7 @@ async function deleteDayOff(dayOffId) {
   });
 }
 
-async function createBarber(name, email, password, role = 'barber', bio = '', instagram = '', tiktok = '', photoUrls = []) {
+async function createBarber(name, email, password, role = 'BARBER', bio = '', instagram = '', tiktok = '', photoUrls = []) {
   return await apiCall('/barbers', {
     method: 'POST',
     body: JSON.stringify({ name, email, password, role, bio, instagram, tiktok, photoUrls }),
@@ -310,7 +310,7 @@ async function fireBarber(barberId, reason) {
 }
 
 async function renderStaffList() {
-  if (state.currentUser.role !== 'boss') {
+  if (state.currentUser.role !== 'BOSS') {
     return;
   }
   const barbers = await fetchBarbers();
@@ -793,7 +793,7 @@ function renderDayOffList() {
       item.appendChild(info);
 
       // Allow deletion only for boss, senior_barber, or the user who owns this day off
-      if (state.currentUser.role === 'boss' || state.currentUser.role === 'senior_barber' || dayOff.barber_id === state.currentUser.id) {
+      if (state.currentUser.role === 'BOSS' || state.currentUser.role === 'SENIOR_BARBER' || dayOff.barber_id === state.currentUser.id) {
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'dayoff-item-delete';
         deleteBtn.textContent = 'Delete';
@@ -831,7 +831,7 @@ async function populateBarberSelects() {
 
   if (elements.dayoffBarber) {
     elements.dayoffBarber.innerHTML = '';
-    if (state.currentUser && (state.currentUser.role === 'boss' || state.currentUser.role === 'senior_barber')) {
+    if (state.currentUser && (state.currentUser.role === 'BOSS' || state.currentUser.role === 'SENIOR_BARBER')) {
       elements.dayoffBarber.style.display = '';
       barbers.forEach(barber => {
         const option = document.createElement('option');
@@ -951,7 +951,7 @@ async function setupDashboard() {
   await refreshDayOffs();
 
   // Show boss section if boss or senior_barber
-  if (state.currentUser.role === 'boss' || state.currentUser.role === 'senior_barber') {
+  if (state.currentUser.role === 'BOSS' || state.currentUser.role === 'SENIOR_BARBER') {
     const bossTabBtn = document.querySelector('[data-tab="barbers"]');
     bossTabBtn.classList.remove('hidden');
   } else {
@@ -1011,7 +1011,7 @@ async function handleDayoffSubmit(event) {
   const date = elements.dayoffDate.value;
   const isRecurring = elements.dayoffRecurring.checked;
   const notes = elements.dayoffNotes.value.trim();
-  const barberId = (state.currentUser.role === 'boss' || state.currentUser.role === 'senior_barber') ? parseInt(elements.dayoffBarber.value) : state.currentUser.id;
+  const barberId = (state.currentUser.role === 'BOSS' || state.currentUser.role === 'SENIOR_BARBER') ? parseInt(elements.dayoffBarber.value) : state.currentUser.id;
 
   if (!date) {
     showToast('Select a date to mark as day off.');

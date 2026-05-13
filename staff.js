@@ -577,7 +577,7 @@ async function fetchBarbers() {
 async function fetchAppointments() {
   const data = await apiCall('/appointments', { method: 'GET' });
   // Regular barbers only see their own appointments. Boss/senior see the full shop.
-  if (state.user && state.user.role !== 'boss' && state.user.role !== 'senior_barber') {
+  if (state.user && state.user.role !== 'BOSS' && state.user.role !== 'SENIOR_BARBER') {
     state.appointments = data.filter(appt => appt.barber_id === state.user.id);
   } else {
     state.appointments = data;
@@ -588,7 +588,7 @@ async function fetchAppointments() {
 async function fetchDayOffs() {
   const data = await apiCall('/dayoffs', { method: 'GET' });
   // Regular barbers only see their own day-offs. Boss/senior see the full shop.
-  if (state.user && state.user.role !== 'boss' && state.user.role !== 'senior_barber') {
+  if (state.user && state.user.role !== 'BOSS' && state.user.role !== 'SENIOR_BARBER') {
     state.dayOffs = data.filter(dayOff => dayOff.barber_id === state.user.id);
   } else {
     state.dayOffs = data;
@@ -766,7 +766,7 @@ function showDayAppointments(dateKey, appointments) {
         <strong>${appt.client_name} • ${appt.appointment_time}</strong>
         <p class="phone-number" data-phone="${appt.client_phone}">${appt.client_phone}</p>
         ${appt.service_type ? `<p><strong>Service:</strong> ${appt.service_type}</p>` : ''}
-        ${state.user && state.user.role === 'boss' ? `<p><strong>Barber:</strong> ${barberLabel}</p>` : ''}
+        ${state.user && state.user.role === 'BOSS' ? `<p><strong>Barber:</strong> ${barberLabel}</p>` : ''}
         <div class="dayoff-item-actions">
           <button class="btn btn-small open-reschedule" data-id="${appt.id}">Reschedule</button>
           <button class="btn btn-small cancel-appointment" data-id="${appt.id}">Cancel</button>
@@ -826,9 +826,9 @@ function renderStaffList() {
     card.className = 'staff-card';
     const info = document.createElement('div');
     // Format role name
-    const roleLabel = barber.role === 'junior_barber' ? 'Junior Barber' : 
-                      barber.role === 'senior_barber' ? 'Senior Barber' : 
-                      barber.role === 'barber' ? 'Barber' : barber.role;
+    const roleLabel = barber.role === 'JUNIOR_BARBER' ? 'Junior Barber' : 
+                      barber.role === 'SENIOR_BARBER' ? 'Senior Barber' : 
+                      barber.role === 'BARBER' ? 'Barber' : barber.role;
     info.innerHTML = `
       <strong>${barber.name}</strong>
       <span>${barber.email}</span>
@@ -850,9 +850,9 @@ function renderStaffList() {
     currentRole.textContent = roleLabel;
     actionBar.appendChild(currentRole);
 
-    const canManage = state.user && (state.user.role === 'boss' || state.user.role === 'senior_barber');
+    const canManage = state.user && (state.user.role === 'BOSS' || state.user.role === 'SENIOR_BARBER');
     if (canManage && barber.id !== state.user.id) {
-      if (barber.role === 'junior_barber' && state.user.role === 'senior_barber') {
+      if (barber.role === 'JUNIOR_BARBER' && state.user.role === 'SENIOR_BARBER') {
         const promoteButton = document.createElement('button');
         promoteButton.className = 'btn btn-small';
         promoteButton.textContent = 'Make barber';
@@ -860,7 +860,7 @@ function renderStaffList() {
           try {
             await apiCall(`/barbers/${barber.id}`, {
               method: 'PUT',
-              body: JSON.stringify({ role: 'barber' }),
+              body: JSON.stringify({ role: 'BARBER' }),
             });
             showToast(`${barber.name} is now a regular barber.`);
             await refreshBarbers();

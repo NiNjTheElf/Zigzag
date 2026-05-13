@@ -15,13 +15,13 @@ async function run() {
     await pool.connect();
     const hashed = await bcrypt.hash('password123', 10);
 
-    await pool.query("DELETE FROM users WHERE role IN ('senior_barber', 'barber', 'junior_barber')");
+    await pool.query("DELETE FROM users WHERE role IN ('SENIOR_BARBER', 'BARBER', 'JUNIOR_BARBER')");
 
     const barbers = [
-      { name: 'Senior Barber', email: 'senior@zigzag.com', role: 'senior_barber' },
-      { name: 'Barber One', email: 'barber1@zigzag.com', role: 'barber' },
-      { name: 'Barber Two', email: 'barber2@zigzag.com', role: 'barber' },
-      { name: 'Junior Barber', email: 'junior@zigzag.com', role: 'junior_barber' }
+      { name: 'Senior Barber', email: 'senior@zigzag.com', role: 'SENIOR_BARBER' },
+      { name: 'Barber One', email: 'barber1@zigzag.com', role: 'BARBER' },
+      { name: 'Barber Two', email: 'barber2@zigzag.com', role: 'BARBER' },
+      { name: 'Junior Barber', email: 'junior@zigzag.com', role: 'JUNIOR_BARBER' }
     ];
 
     for (const barber of barbers) {
