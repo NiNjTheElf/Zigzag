@@ -247,9 +247,9 @@ async function openRescheduleModal(appointment) {
 
 function saveSession(token, user) {
   state.token = token;
-  state.user = user;
+  state.user = { ...user, role: normalizeRole(user.role) };
   localStorage.setItem(STORAGE_KEY_TOKEN, token);
-  localStorage.setItem('zigzagStaffUser', JSON.stringify(user));
+  localStorage.setItem('zigzagStaffUser', JSON.stringify(state.user));
 }
 
 function logout() {
@@ -296,6 +296,21 @@ function parseServiceList(rawServices) {
     return [{ name: trimmed, photoUrl: '' }];
   }
   return [];
+}
+
+function normalizeRole(role) {
+  if (!role) return '';
+  return String(role).trim().toUpperCase();
+}
+
+function formatRoleLabel(role) {
+  switch (normalizeRole(role)) {
+    case 'BOSS': return 'Boss';
+    case 'SENIOR_BARBER': return 'Senior Barber';
+    case 'JUNIOR_BARBER': return 'Junior Barber';
+    case 'BARBER': return 'Barber';
+    default: return role || 'Staff';
+  }
 }
 
 function serializeServiceList(list) {
@@ -564,14 +579,14 @@ async function fetchCurrentUser() {
   const data = await apiCall('/auth/me', {
     method: 'GET',
   });
-  state.user = data.user;
-  return data.user;
+  state.user = { ...data.user, role: normalizeRole(data.user.role) };
+  return state.user;
 }
 
 async function fetchBarbers() {
   const data = await apiCall('/barbers', { method: 'GET' });
-  state.barbers = data;
-  return data;
+  state.barbers = data.map(barber => ({ ...barber, role: normalizeRole(barber.role) }));
+  return state.barbers;
 }
 
 async function fetchAppointments() {
@@ -822,13 +837,11 @@ function renderStaffList() {
   if (!elements.staffList) return;
   elements.staffList.innerHTML = '';
   state.barbers.forEach(barber => {
+    const normalizedBarberRole = normalizeRole(barber.role);
     const card = document.createElement('div');
     card.className = 'staff-card';
     const info = document.createElement('div');
-    // Format role name
-    const roleLabel = barber.role === 'JUNIOR_BARBER' ? 'Junior Barber' : 
-                      barber.role === 'SENIOR_BARBER' ? 'Senior Barber' : 
-                      barber.role === 'BARBER' ? 'Barber' : barber.role;
+    const roleLabel = formatRoleLabel(normalizedBarberRole);
     info.innerHTML = `
       <strong>${barber.name}</strong>
       <span>${barber.email}</span>
@@ -838,7 +851,7 @@ function renderStaffList() {
     details.innerHTML = `<span style="font-size:0.85rem;color:#c9c1b5;">${roleLabel}</span>`;
     card.appendChild(info);
     card.appendChild(details);
-      const actionBar = document.createElement('div');
+    const actionBar = document.createElement('div');
     actionBar.className = 'staff-card-actions';
     actionBar.style.display = 'flex';
     actionBar.style.gap = '10px';
@@ -852,7 +865,7 @@ function renderStaffList() {
 
     const canManage = state.user && (state.user.role === 'BOSS' || state.user.role === 'SENIOR_BARBER');
     if (canManage && barber.id !== state.user.id) {
-      if (barber.role === 'JUNIOR_BARBER' && state.user.role === 'SENIOR_BARBER') {
+      if (normalizedBarberRole === 'JUNIOR_BARBER' && state.user.role === 'SENIOR_BARBER') {
         const promoteButton = document.createElement('button');
         promoteButton.className = 'btn btn-small';
         promoteButton.textContent = 'Make barber';
@@ -870,7 +883,7 @@ function renderStaffList() {
         });
         actionBar.appendChild(promoteButton);
       }
-      if (barber.role === 'barber' || barber.role === 'junior_barber') {
+      if (normalizedBarberRole === 'BARBER' || normalizedBarberRole === 'JUNIOR_BARBER') {
         const deleteButton = document.createElement('button');
         deleteButton.className = 'btn btn-secondary btn-small';
         deleteButton.textContent = 'Fire';
@@ -1102,7 +1115,7 @@ async function handleCreateBarber(event) {
     const name = elements.newBarberName.value.trim();
     const email = elements.newBarberEmail.value.trim().toLowerCase();
     const password = elements.newBarberPassword.value.trim();
-    const role = elements.newBarberRole.value;
+    const role = normalizeRole(elements.newBarberRole.value) || 'BARBER';
     const bio = elements.newBarberBio.value.trim();
     const instagram = elements.newBarberInstagram.value.trim();
     const tiktok = elements.newBarberTiktok.value.trim();
@@ -1186,8 +1199,8 @@ async function refreshAll() {
   if (state.token) {
     await fetchCurrentUser();
   }
-  const isSenior = state.user.role === 'senior_barber';
-  const isBoss = state.user.role === 'boss';
+  const isSenior = state.user.role === 'SENIOR_BARBER';
+  const isBoss = state.user.role === 'BOSS';
   const teamTab = document.querySelector('[data-tab="team"]');
   const appointmentTab = document.querySelector('[data-tab="appointments"]');
   const dayoffTab = document.querySelector('[data-tab="dayoffs"]');
@@ -1211,7 +1224,14 @@ async function init() {
   const storedUser = localStorage.getItem('zigzagStaffUser');
   if (storedToken) state.token = storedToken;
   if (storedUser) {
-    try { state.user = JSON.parse(storedUser); } catch { localStorage.removeItem('zigzagStaffUser'); }
+    try {
+      state.user = JSON.parse(storedUser);
+      if (state.user) {
+        state.user.role = normalizeRole(state.user.role);
+      }
+    } catch {
+      localStorage.removeItem('zigzagStaffUser');
+    }
   }
   if (state.token && state.user) {
     elements.loginSection.classList.add('hidden');
