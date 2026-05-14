@@ -5,6 +5,11 @@ const elements = {
   barberGrid: document.getElementById('booking-barber-grid'),
   barberSelect: document.getElementById('booking-barber'),
   bookingDate: document.getElementById('booking-date'),
+  bookingCalendar: document.getElementById('booking-calendar'),
+  bookingCalendarMonth: document.getElementById('booking-calendar-month'),
+  bookingSelectedDate: document.getElementById('booking-selected-date'),
+  bookingPrevMonth: document.getElementById('booking-prev-month'),
+  bookingNextMonth: document.getElementById('booking-next-month'),
   bookingService: document.getElementById('booking-service'),
   bookingServiceOptions: document.getElementById('booking-service-options'),
   bookingTime: document.getElementById('booking-time'),
@@ -19,6 +24,10 @@ const elements = {
 const state = {
   barbers: [],
   selectedBarberId: null,
+  selectedDateKey: '',
+  currentCalendarMonth: new Date(),
+  todayDateKey: '',
+  closedDateKeys: new Set(),
 };
 
 function showToast(message) {
@@ -71,6 +80,180 @@ function normalizeDuration(value) {
   const duration = parseInt(value, 10);
   if (!Number.isFinite(duration)) return 60;
   return Math.min(Math.max(duration, 5), 480);
+}
+
+function formatDateForInput(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function parseDateKey(dateKey) {
+  if (!dateKey) return null;
+  const [year, month, day] = dateKey.split('-').map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day);
+}
+
+function formatSelectedDateLabel(dateKey) {
+  const date = parseDateKey(dateKey);
+  if (!date) return 'Selected date: --';
+  const pretty = date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+  return `Selected date: ${pretty}`;
+}
+
+function getMonthStart(date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+function getDaysInMonth(date) {
+  return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+}
+
+function getFirstDayOffsetMonday(date) {
+  return (getMonthStart(date).getDay() + 6) % 7;
+}
+
+async function fetchClosedDatesForCurrentMonth() {
+  if (!state.selectedBarberId) {
+    state.closedDateKeys = new Set();
+    return;
+  }
+  const monthStart = getMonthStart(state.currentCalendarMonth);
+  const year = monthStart.getFullYear();
+  const month = monthStart.getMonth() + 1;
+  try {
+    const params = new URLSearchParams({
+      barberId: String(state.selectedBarberId),
+      year: String(year),
+      month: String(month),
+    });
+    const data = await apiCall(`/dayoffs/public?${params.toString()}`, { method: 'GET' });
+    state.closedDateKeys = new Set((data.closedDates || []).filter(Boolean));
+  } catch (error) {
+    state.closedDateKeys = new Set();
+    showToast('Could not load day-off markers: ' + error.message);
+  }
+}
+
+async function refreshCalendarDayOffMarkers() {
+  await fetchClosedDatesForCurrentMonth();
+  renderBookingCalendar();
+}
+
+function renderBookingCalendar() {
+  if (!elements.bookingCalendar) return;
+
+  const monthStart = getMonthStart(state.currentCalendarMonth);
+  const year = monthStart.getFullYear();
+  const month = monthStart.getMonth();
+  const daysInMonth = getDaysInMonth(monthStart);
+  const startOffset = getFirstDayOffsetMonday(monthStart);
+  const todayStart = parseDateKey(state.todayDateKey);
+
+  if (elements.bookingCalendarMonth) {
+    elements.bookingCalendarMonth.textContent = monthStart.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  }
+
+  elements.bookingCalendar.innerHTML = '';
+  const headerDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  headerDays.forEach(day => {
+    const header = document.createElement('div');
+    header.className = 'calendar-header';
+    header.textContent = day;
+    elements.bookingCalendar.appendChild(header);
+  });
+
+  for (let i = 0; i < startOffset; i++) {
+    const emptyDay = document.createElement('div');
+    emptyDay.className = 'calendar-day other-month';
+    elements.bookingCalendar.appendChild(emptyDay);
+  }
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    const date = new Date(year, month, day);
+    const dateKey = formatDateForInput(date);
+    const isClosed = state.closedDateKeys.has(dateKey);
+    const dayButton = document.createElement('button');
+    dayButton.type = 'button';
+    dayButton.className = 'calendar-day booking-window-day';
+    dayButton.dataset.date = dateKey;
+
+    if (dateKey === state.selectedDateKey) {
+      dayButton.classList.add('window-selected');
+    }
+    if (isClosed) {
+      dayButton.classList.add('window-closed');
+      dayButton.disabled = true;
+      dayButton.setAttribute('aria-disabled', 'true');
+    } else if (dateKey === state.todayDateKey) {
+      dayButton.classList.add('today', 'window-today');
+    } else if (todayStart && date < todayStart) {
+      dayButton.classList.add('past', 'window-broken');
+      dayButton.disabled = true;
+      dayButton.setAttribute('aria-disabled', 'true');
+    } else {
+      dayButton.classList.add('window-future');
+    }
+
+    const dayNumber = document.createElement('div');
+    dayNumber.className = 'calendar-day-number';
+    dayNumber.textContent = String(day);
+
+    const dayState = document.createElement('div');
+    dayState.className = 'calendar-day-indicator';
+    dayState.textContent = isClosed
+      ? 'CLOSED'
+      : (dateKey === state.todayDateKey ? 'TODAY' : (dayButton.classList.contains('past') ? 'PASSED' : 'OPEN'));
+
+    dayButton.append(dayNumber, dayState);
+    dayButton.addEventListener('click', () => {
+      setSelectedBookingDate(dateKey, { keepMonth: true, render: true, loadSlots: true });
+    });
+
+    elements.bookingCalendar.appendChild(dayButton);
+  }
+
+  const totalCells = startOffset + daysInMonth;
+  const remainder = (7 - (totalCells % 7)) % 7;
+  for (let i = 0; i < remainder; i++) {
+    const emptyDay = document.createElement('div');
+    emptyDay.className = 'calendar-day other-month';
+    elements.bookingCalendar.appendChild(emptyDay);
+  }
+}
+
+function setSelectedBookingDate(dateKey, options = {}) {
+  const { keepMonth = false, render = true, loadSlots = false } = options;
+  if (!dateKey) return;
+  const selectedDate = parseDateKey(dateKey);
+  const todayStart = parseDateKey(state.todayDateKey);
+  if (!selectedDate) return;
+  if (todayStart && selectedDate < todayStart) {
+    showToast('Pick today or a future date.');
+    return;
+  }
+  if (state.closedDateKeys.has(dateKey)) {
+    showToast('This day is closed (day-off). Choose another date.');
+    return;
+  }
+
+  state.selectedDateKey = dateKey;
+  elements.bookingDate.value = dateKey;
+
+  if (!keepMonth) {
+    state.currentCalendarMonth = getMonthStart(selectedDate);
+  }
+  if (elements.bookingSelectedDate) {
+    elements.bookingSelectedDate.textContent = formatSelectedDateLabel(dateKey);
+  }
+  if (render) {
+    renderBookingCalendar();
+  }
+  if (loadSlots) {
+    renderAvailableSlots();
+  }
 }
 
 async function fetchBarbers() {
@@ -127,10 +310,11 @@ function renderBarberCards() {
     }
     
     card.querySelectorAll('button').forEach(btn => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', async () => {
         if (btn.dataset.action === 'book') {
           elements.barberSelect.value = barber.id;
           setSelectedBarber(barber.id);
+          await refreshCalendarDayOffMarkers();
           renderBarberGallery();
           renderAvailableSlots();
           document.getElementById('booking-form').scrollIntoView({ behavior: 'smooth' });
@@ -428,6 +612,10 @@ async function renderAvailableSlots() {
     elements.bookingSlots.innerHTML = '<div class="slot-message">Pick a barber and date to see open times.</div>';
     return;
   }
+  if (state.closedDateKeys.has(date)) {
+    elements.bookingSlots.innerHTML = '<div class="slot-message">Closed day-off. Pick another date.</div>';
+    return;
+  }
   try {
     const params = new URLSearchParams({
       barberId,
@@ -479,9 +667,8 @@ async function handleBookingSubmit(event) {
     });
     showToast('Appointment booked successfully.');
     elements.bookingForm.reset();
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    elements.bookingDate.value = tomorrow.toISOString().split('T')[0];
+    populateServiceSelect(elements.barberSelect.value);
+    setSelectedBookingDate(state.todayDateKey, { keepMonth: false, render: true, loadSlots: false });
     renderAvailableSlots();
   } catch (error) {
     showToast('Booking failed: ' + error.message);
@@ -489,12 +676,31 @@ async function handleBookingSubmit(event) {
 }
 
 function bindEvents() {
-  elements.barberSelect.addEventListener('change', () => {
+  elements.barberSelect.addEventListener('change', async () => {
     setSelectedBarber(elements.barberSelect.value);
+    await refreshCalendarDayOffMarkers();
     renderBarberGallery();
     renderAvailableSlots();
   });
-  elements.bookingDate.addEventListener('change', renderAvailableSlots);
+  elements.bookingDate.addEventListener('change', () => {
+    setSelectedBookingDate(elements.bookingDate.value, { keepMonth: false, render: true, loadSlots: true });
+  });
+  elements.bookingPrevMonth?.addEventListener('click', async () => {
+    state.currentCalendarMonth = new Date(
+      state.currentCalendarMonth.getFullYear(),
+      state.currentCalendarMonth.getMonth() - 1,
+      1
+    );
+    await refreshCalendarDayOffMarkers();
+  });
+  elements.bookingNextMonth?.addEventListener('click', async () => {
+    state.currentCalendarMonth = new Date(
+      state.currentCalendarMonth.getFullYear(),
+      state.currentCalendarMonth.getMonth() + 1,
+      1
+    );
+    await refreshCalendarDayOffMarkers();
+  });
   elements.bookingService.addEventListener('change', () => {
     elements.bookingServiceOptions.querySelectorAll('.booking-service-option').forEach(button => {
       button.classList.toggle('selected', button.querySelector('.booking-service-text span')?.textContent === elements.bookingService.value);
@@ -505,13 +711,18 @@ function bindEvents() {
 }
 
 async function init() {
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  elements.bookingDate.value = tomorrow.toISOString().split('T')[0];
+  const today = new Date();
+  state.todayDateKey = formatDateForInput(today);
+  state.currentCalendarMonth = getMonthStart(today);
+  if (elements.bookingDate) {
+    elements.bookingDate.min = state.todayDateKey;
+  }
+  setSelectedBookingDate(state.todayDateKey, { keepMonth: false, render: true, loadSlots: false });
   bindEvents();
   await fetchBarbers();
   renderBarberCards();
   fillBarberSelect();
+  await refreshCalendarDayOffMarkers();
   renderAvailableSlots();
 }
 

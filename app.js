@@ -126,6 +126,38 @@ function getFirstDayOfMonth(date) {
   return new Date(date.getFullYear(), date.getMonth(), 1).getDay();
 }
 
+function getDayOfWeekFromDateKey(dateKey) {
+  const [year, month, day] = String(dateKey || '').split('-').map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+}
+
+function normalizeDateKey(rawDate) {
+  if (!rawDate) return '';
+
+  if (typeof rawDate === 'string') {
+    const match = rawDate.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (match) return match[1];
+  }
+
+  if (rawDate instanceof Date && !Number.isNaN(rawDate.getTime())) {
+    const year = rawDate.getUTCFullYear();
+    const month = String(rawDate.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(rawDate.getUTCDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  const parsed = new Date(rawDate);
+  if (!Number.isNaN(parsed.getTime())) {
+    const year = parsed.getUTCFullYear();
+    const month = String(parsed.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(parsed.getUTCDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  return '';
+}
+
 function dateToDateKey(date) {
   return formatDateForInput(date);
 }
@@ -269,9 +301,7 @@ async function getAvailableSlots(barberId, date) {
 async function addDayOff(barberId, date, isRecurring, notes) {
   let recurringDayOfWeek = null;
   if (isRecurring) {
-    const [year, month, day] = date.split('-').map(Number);
-    const localDate = new Date(year, month - 1, day);
-    recurringDayOfWeek = localDate.getDay();
+    recurringDayOfWeek = getDayOfWeekFromDateKey(date);
   }
   return await apiCall('/dayoffs', {
     method: 'POST',
@@ -684,10 +714,12 @@ function renderDayOffCalendar() {
   // Create day-off map
   const dayOffMap = {};
   state.dayOffs.forEach(dayOff => {
-    if (!dayOffMap[dayOff.day_off_date]) {
-      dayOffMap[dayOff.day_off_date] = [];
+    const dateKey = normalizeDateKey(dayOff.day_off_date);
+    if (!dateKey) return;
+    if (!dayOffMap[dateKey]) {
+      dayOffMap[dateKey] = [];
     }
-    dayOffMap[dayOff.day_off_date].push(dayOff);
+    dayOffMap[dateKey].push(dayOff);
   });
 
   elements.dayoffsCalendar.innerHTML = '';
@@ -770,7 +802,7 @@ function renderDayOffList() {
   }
 
   state.dayOffs
-    .sort((a, b) => a.day_off_date.localeCompare(b.day_off_date))
+    .sort((a, b) => normalizeDateKey(a.day_off_date).localeCompare(normalizeDateKey(b.day_off_date)))
     .forEach(dayOff => {
       const item = document.createElement('div');
       item.className = 'dayoff-item';
@@ -779,10 +811,11 @@ function renderDayOffList() {
       info.className = 'dayoff-item-info';
 
       const name = document.createElement('strong');
-      const rawDate = dayOff.day_off_date;
+      const rawDate = normalizeDateKey(dayOff.day_off_date);
       let formattedDate = 'Unknown date';
       if (rawDate) {
-        const dateObj = new Date(rawDate + 'T00:00:00');
+        const [year, month, day] = rawDate.split('-').map(Number);
+        const dateObj = new Date(year, month - 1, day);
         formattedDate = isNaN(dateObj.getTime()) ? rawDate : formatDateDisplay(dateObj);
       }
       name.textContent = dayOff.is_recurring

@@ -495,6 +495,12 @@ const parseDateString = (dateStr) => {
   return new Date(year, month - 1, day);
 };
 
+const getDayOfWeekFromDateKey = (dateStr) => {
+  const [year, month, day] = String(dateStr || '').split('-').map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+};
+
 const formatDateOnly = (date) => {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -507,6 +513,13 @@ const normalizeAppointmentRecord = (row) => ({
   appointment_date: row.appointment_date instanceof Date
     ? formatDateOnly(row.appointment_date)
     : row.appointment_date,
+});
+
+const normalizeDayOffRecord = (row) => ({
+  ...row,
+  day_off_date: row.day_off_date instanceof Date
+    ? formatDateOnly(row.day_off_date)
+    : row.day_off_date,
 });
 
 app.get('/api/appointments', authenticateToken, async (req, res) => {
@@ -581,7 +594,7 @@ app.get('/api/appointments/available', async (req, res) => {
   try {
     const dayOffResult = await pool.query(
       'SELECT * FROM "day_offs" WHERE "barber_id" = $1 AND ("day_off_date" = $2 OR ("is_recurring" = true AND "recurring_day_of_week" = $3))',
-      [parsedBarberId, date, parseDateString(date).getDay()]
+      [parsedBarberId, date, getDayOfWeekFromDateKey(date)]
     );
 
     if (dayOffResult.rows.length > 0) {
@@ -611,7 +624,7 @@ app.post('/api/appointments', async (req, res) => {
     const duration = await resolveAppointmentDuration(parsedBarberId, serviceType, durationMinutes);
     const checkDayOff = await pool.query(
       'SELECT * FROM "day_offs" WHERE "barber_id" = $1 AND ("day_off_date" = $2 OR ("is_recurring" = true AND "recurring_day_of_week" = $3))',
-      [parsedBarberId, date, parseDateString(date).getDay()]
+      [parsedBarberId, date, getDayOfWeekFromDateKey(date)]
     );
 
     if (checkDayOff.rows.length > 0) {
@@ -667,7 +680,7 @@ app.post('/api/appointments/:id/move-next-day', authenticateToken, async (req, r
 
     const dayOffResult = await pool.query(
       'SELECT * FROM "day_offs" WHERE "barber_id" = $1 AND ("day_off_date" = $2 OR ("is_recurring" = true AND "recurring_day_of_week" = $3))',
-      [appointment.barber_id, nextDate, parseDateString(nextDate).getDay()]
+      [appointment.barber_id, nextDate, getDayOfWeekFromDateKey(nextDate)]
     );
 
     if (dayOffResult.rows.length > 0) {
@@ -713,7 +726,7 @@ app.post('/api/appointments/:id/reschedule', authenticateToken, async (req, res)
 
     const dayOffResult = await pool.query(
       'SELECT * FROM "day_offs" WHERE "barber_id" = $1 AND ("day_off_date" = $2 OR ("is_recurring" = true AND "recurring_day_of_week" = $3))',
-      [appointment.barber_id, date, parseDateString(date).getDay()]
+      [appointment.barber_id, date, getDayOfWeekFromDateKey(date)]
     );
 
     if (dayOffResult.rows.length > 0) {
@@ -856,6 +869,67 @@ app.delete('/api/availability/:id', authenticateToken, async (req, res) => {
 
 // ==================== DAY-OFF ROUTES ====================
 
+app.get('/api/dayoffs/public', async (req, res) => {
+  const parsedBarberId = parseInt(req.query.barberId, 10);
+  const parsedYear = parseInt(req.query.year, 10);
+  const parsedMonth = parseInt(req.query.month, 10);
+
+  if (isNaN(parsedBarberId) || isNaN(parsedYear) || isNaN(parsedMonth) || parsedMonth < 1 || parsedMonth > 12) {
+    return res.status(400).json({ error: 'barberId, year, and month are required' });
+  }
+
+  try {
+    const startDate = formatDateOnly(new Date(parsedYear, parsedMonth - 1, 1));
+    const endDate = formatDateOnly(new Date(parsedYear, parsedMonth, 0));
+
+    const result = await pool.query(
+      `SELECT "day_off_date", "is_recurring", "recurring_day_of_week"
+       FROM "day_offs"
+       WHERE "barber_id" = $1
+         AND (
+           ("is_recurring" = false AND "day_off_date" BETWEEN $2 AND $3)
+           OR
+           ("is_recurring" = true AND "day_off_date" <= $3)
+         )`,
+      [parsedBarberId, startDate, endDate]
+    );
+
+    const closedDates = new Set();
+    const recurringRules = [];
+
+    result.rows.forEach(row => {
+      const dayOffDateKey = row.day_off_date instanceof Date ? formatDateOnly(row.day_off_date) : String(row.day_off_date || '');
+      if (!dayOffDateKey) return;
+      if (row.is_recurring && row.recurring_day_of_week !== null && row.recurring_day_of_week !== undefined) {
+        recurringRules.push({
+          startDateKey: dayOffDateKey,
+          dayOfWeek: Number(row.recurring_day_of_week),
+        });
+      } else if (dayOffDateKey >= startDate && dayOffDateKey <= endDate) {
+        closedDates.add(dayOffDateKey);
+      }
+    });
+
+    const daysInMonth = new Date(parsedYear, parsedMonth, 0).getDate();
+    for (let day = 1; day <= daysInMonth; day++) {
+      const date = new Date(parsedYear, parsedMonth - 1, day);
+      const dateKey = formatDateOnly(date);
+      const dayOfWeek = date.getDay();
+
+      recurringRules.forEach(rule => {
+        if (dayOfWeek === rule.dayOfWeek && dateKey >= rule.startDateKey) {
+          closedDates.add(dateKey);
+        }
+      });
+    }
+
+    res.json({ closedDates: Array.from(closedDates).sort() });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to fetch public day-offs' });
+  }
+});
+
 app.get('/api/dayoffs', authenticateToken, async (req, res) => {
   const { barberId, year, month } = req.query;
   try {
@@ -880,7 +954,7 @@ app.get('/api/dayoffs', authenticateToken, async (req, res) => {
 
     query += ' ORDER BY day_off_date';
     const result = await pool.query(query, params);
-    res.json(result.rows);
+    res.json(result.rows.map(normalizeDayOffRecord));
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to fetch day-offs' });
@@ -893,11 +967,16 @@ app.post('/api/dayoffs', authenticateToken, async (req, res) => {
   const barberId = isManager && req.body.barberId ? parseInt(req.body.barberId) : req.user.id;
 
   try {
+    const normalizedRecurringDow = isRecurring
+      ? (recurringDayOfWeek !== null && recurringDayOfWeek !== undefined
+        ? parseInt(recurringDayOfWeek, 10)
+        : getDayOfWeekFromDateKey(date))
+      : null;
     const result = await pool.query(
       'INSERT INTO day_offs (barber_id, day_off_date, is_recurring, recurring_day_of_week, notes) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-      [barberId, date, isRecurring || false, isRecurring ? (recurringDayOfWeek !== null && recurringDayOfWeek !== undefined ? recurringDayOfWeek : null) : null, notes || null]
+      [barberId, date, isRecurring || false, normalizedRecurringDow, notes || null]
     );
-    res.status(201).json(result.rows[0]);
+    res.status(201).json(normalizeDayOffRecord(result.rows[0]));
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to create day-off' });
@@ -909,16 +988,19 @@ app.put('/api/dayoffs/:id', authenticateToken, async (req, res) => {
   const { isRecurring, recurringDayOfWeek, notes } = req.body;
 
   try {
+    const normalizedRecurringDow = isRecurring
+      ? (recurringDayOfWeek !== null && recurringDayOfWeek !== undefined ? parseInt(recurringDayOfWeek, 10) : null)
+      : null;
     const result = await pool.query(
       'UPDATE day_offs SET is_recurring = $1, recurring_day_of_week = $2, notes = $3 WHERE id = $4 AND barber_id = $5 RETURNING *',
-      [isRecurring || false, recurringDayOfWeek || null, notes || null, parseInt(id), req.user.id]
+      [isRecurring || false, normalizedRecurringDow, notes || null, parseInt(id), req.user.id]
     );
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Day-off not found or access denied' });
     }
 
-    res.json(result.rows[0]);
+    res.json(normalizeDayOffRecord(result.rows[0]));
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to update day-off' });

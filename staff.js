@@ -23,7 +23,6 @@ const elements = {
   loginPassword: document.getElementById('staff-password'),
   dashboardTitle: document.getElementById('staff-dashboard-title'),
   logoutButton: document.getElementById('staff-logout-button'),
-  appointmentsList: document.getElementById('appointments-list'),
   appointmentsCalendar: document.getElementById('appointments-calendar'),
   currentApptMonth: document.getElementById('current-appt-month'),
   prevApptMonthBtn: document.getElementById('prev-appt-month'),
@@ -572,6 +571,12 @@ function formatDateForInput(date) {
   return `${year}-${month}-${day}`;
 }
 
+function getDayOfWeekFromDateKey(dateKey) {
+  const [year, month, day] = String(dateKey || '').split('-').map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+}
+
 function formatIsoDateShort(rawDate) {
   if (!rawDate) return '';
 
@@ -809,34 +814,6 @@ function renderAppointmentsCalendar() {
     emptyDay.className = 'calendar-day other-month';
     elements.appointmentsCalendar.appendChild(emptyDay);
   }
-}
-
-function renderAppointmentsList() {
-  if (!elements.appointmentsList) return;
-  elements.appointmentsList.innerHTML = '';
-  const appointments = state.appointments
-    .slice()
-    .sort((a, b) => `${normalizeDateKey(a.appointment_date)} ${a.appointment_time}`.localeCompare(`${normalizeDateKey(b.appointment_date)} ${b.appointment_time}`));
-
-  if (!appointments.length) {
-    elements.appointmentsList.innerHTML = '<p>No appointments yet.</p>';
-    return;
-  }
-
-  appointments.forEach(appt => {
-    const barber = state.barbers.find(b => b.id === appt.barber_id);
-    const item = document.createElement('div');
-    item.className = 'dayoff-item';
-    item.innerHTML = `
-      <div class="dayoff-item-info">
-        <strong>${formatIsoDateShort(appt.appointment_date)} at ${appt.appointment_time}</strong>
-        <p>${appt.client_name} - ${appt.client_phone}</p>
-        ${appt.service_type ? `<p>${appt.service_type}${appt.duration_minutes ? ` (${appt.duration_minutes} min)` : ''}</p>` : ''}
-        ${barber ? `<p>${barber.name}</p>` : ''}
-      </div>
-    `;
-    elements.appointmentsList.appendChild(item);
-  });
 }
 
 function showDayAppointments(dateKey, appointments) {
@@ -1260,24 +1237,19 @@ async function handleDayoffSubmit(event) {
   }
   try {
     const date = state.selectedDayoffDate;
-    const [year, month, day] = date.split('-').map(Number);
-    const adjustedDate = new Date(year, month - 1, day + 1);
-    const adjustedDateStr = formatDateForInput(adjustedDate);
-    const originalDate = new Date(year, month - 1, day);
     const isRecurring = elements.dayoffRecurring.checked;
     const notes = elements.dayoffNotes.value.trim();
     
-    // Parse date in local timezone (not UTC)
     let recurringDayOfWeek = null;
     if (isRecurring) {
-      recurringDayOfWeek = originalDate.getDay();
+      recurringDayOfWeek = getDayOfWeekFromDateKey(date);
     }
     
     await apiCall('/dayoffs', {
       method: 'POST',
       body: JSON.stringify({ 
         barberId: state.user.id,
-        date: adjustedDateStr, 
+        date, 
         isRecurring, 
         recurringDayOfWeek,
         notes 
@@ -1320,7 +1292,6 @@ async function refreshBarbers() {
 async function refreshAppointments() {
   await fetchAppointments();
   renderAppointmentsCalendar();
-  renderAppointmentsList();
   if (state.selectedApptDate) {
     const appointments = state.appointments.filter(appt => normalizeDateKey(appt.appointment_date) === state.selectedApptDate);
     showDayAppointments(state.selectedApptDate, appointments);
