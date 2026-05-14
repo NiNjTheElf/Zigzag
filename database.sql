@@ -26,8 +26,15 @@ CREATE TABLE IF NOT EXISTS "appointments" (
     "appointment_date" DATE,
     "appointment_time" TEXT,
     "service_type" TEXT,
+    "duration_minutes" INTEGER NOT NULL DEFAULT 60,
     "created_at" TIMESTAMPTZ DEFAULT NOW()
 );
+
+ALTER TABLE "appointments"
+ADD COLUMN IF NOT EXISTS "duration_minutes" INTEGER NOT NULL DEFAULT 60;
+
+CREATE INDEX IF NOT EXISTS "appointments_barber_date_idx"
+ON "appointments" ("barber_id", "appointment_date");
 
 -- 4. Create the Day Offs table
 CREATE TABLE IF NOT EXISTS "day_offs" (
@@ -40,7 +47,23 @@ CREATE TABLE IF NOT EXISTS "day_offs" (
     "created_at" TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 5. Create the Reviews table
+CREATE INDEX IF NOT EXISTS "day_offs_barber_date_idx"
+ON "day_offs" ("barber_id", "day_off_date");
+
+-- 5. Create custom barber availability times
+CREATE TABLE IF NOT EXISTS "barber_available_times" (
+    "id" SERIAL PRIMARY KEY,
+    "barber_id" INTEGER NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+    "time_label" TEXT NOT NULL,
+    "sort_minutes" INTEGER NOT NULL,
+    "created_at" TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE ("barber_id", "sort_minutes")
+);
+
+CREATE INDEX IF NOT EXISTS "barber_available_times_barber_sort_idx"
+ON "barber_available_times" ("barber_id", "sort_minutes");
+
+-- 6. Create the Reviews table
 CREATE TABLE IF NOT EXISTS "reviews" (
     "id" SERIAL PRIMARY KEY,
     "barber_id" INTEGER NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
@@ -54,7 +77,7 @@ CREATE TABLE IF NOT EXISTS "reviews" (
     "created_at" TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 6. Insert default users
+-- 7. Insert default users
 INSERT INTO "users" ("name", "email", "password", "role") VALUES
   ('ZigZag Boss', 'boss@zigzag.com', '$2a$10$ZQIPoLW9k43OdCYADIN3L.FPO8eMClEevulVoSlG19QYDSqU9FLL.', 'BOSS'),
   ('Alex Mercer', 'alex@zigzag.com', '$2a$10$peowVLs8e7k42yYXuBtPwOFnWy.PYQotK5kzYQLJtB10UJQuzFP4m', 'BARBER'),

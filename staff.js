@@ -8,6 +8,7 @@ const state = {
   appointments: [],
   dayOffs: [],
   serviceList: [],
+  availabilityTimes: [],
   currentApptMonth: new Date(),
   currentDayoffMonth: new Date(),
   selectedApptDate: null,
@@ -45,8 +46,12 @@ const elements = {
   serviceCards: document.getElementById('service-cards'),
   serviceForm: document.getElementById('service-form'),
   serviceName: document.getElementById('service-name'),
+  serviceDuration: document.getElementById('service-duration'),
   servicePhotoFile: document.getElementById('service-photo-file'),
   servicePhotoPreview: document.getElementById('service-photo-preview'),
+  availabilityForm: document.getElementById('availability-form'),
+  availabilityTime: document.getElementById('availability-time'),
+  availabilityList: document.getElementById('availability-list'),
   createBarberForm: document.getElementById('create-barber-form'),
   newBarberName: document.getElementById('new-barber-name'),
   newBarberEmail: document.getElementById('new-barber-email'),
@@ -111,8 +116,11 @@ async function apiCall(endpoint, options = {}) {
   }
 }
 
-async function getAvailableSlots(barberId, date) {
-  return await apiCall(`/appointments/available?barberId=${barberId}&date=${date}`, {
+async function getAvailableSlots(barberId, date, serviceType = '', durationMinutes = '') {
+  const params = new URLSearchParams({ barberId, date });
+  if (serviceType) params.set('serviceType', serviceType);
+  if (durationMinutes) params.set('durationMinutes', durationMinutes);
+  return await apiCall(`/appointments/available?${params.toString()}`, {
     method: 'GET',
   });
 }
@@ -210,7 +218,12 @@ async function openRescheduleModal(appointment) {
   async function loadSlots(dateValue) {
     if (!dateValue) return;
     try {
-      const { available, isDayOff } = await getAvailableSlots(appointment.barber_id, dateValue);
+      const { available, isDayOff } = await getAvailableSlots(
+        appointment.barber_id,
+        dateValue,
+        appointment.service_type || '',
+        appointment.duration_minutes || ''
+      );
       renderSlots(available, isDayOff);
       selectedDate = dateValue;
       selectedTime = '';
@@ -269,16 +282,32 @@ function normalizePhotoUrls(photoData) {
   return [];
 }
 
+function normalizeDuration(value) {
+  const duration = parseInt(value, 10);
+  if (!Number.isFinite(duration)) return 60;
+  return Math.min(Math.max(duration, 5), 480);
+}
+
 function parseServiceList(rawServices) {
   if (!rawServices) return [];
-  if (Array.isArray(rawServices)) return rawServices;
+  if (Array.isArray(rawServices)) {
+    return rawServices.map(item => {
+      if (typeof item === 'string') return { name: item, photoUrl: '', durationMinutes: 60 };
+      return { ...item, durationMinutes: normalizeDuration(item.durationMinutes || item.duration || 60) };
+    });
+  }
   if (typeof rawServices === 'string') {
     const trimmed = rawServices.trim();
     if (!trimmed) return [];
     if (trimmed.startsWith('[')) {
       try {
         const parsed = JSON.parse(trimmed);
-        return Array.isArray(parsed) ? parsed : [];
+        return Array.isArray(parsed)
+          ? parsed.map(item => {
+              if (typeof item === 'string') return { name: item, photoUrl: '', durationMinutes: 60 };
+              return { ...item, durationMinutes: normalizeDuration(item.durationMinutes || item.duration || 60) };
+            })
+          : [];
       } catch {
         // fall through to legacy parsing
       }
@@ -289,11 +318,11 @@ function parseServiceList(rawServices) {
       const [category, items] = part.split(':').map(s => s.trim());
       if (!items) return;
       items.split(',').map(item => item.trim()).filter(Boolean).forEach(item => {
-        services.push({ name: `${category} - ${item}`, photoUrl: '' });
+        services.push({ name: `${category} - ${item}`, photoUrl: '', durationMinutes: 60 });
       });
     });
     if (services.length) return services;
-    return [{ name: trimmed, photoUrl: '' }];
+    return [{ name: trimmed, photoUrl: '', durationMinutes: 60 }];
   }
   return [];
 }
@@ -314,7 +343,11 @@ function formatRoleLabel(role) {
 }
 
 function serializeServiceList(list) {
-  return JSON.stringify(list.map(service => ({ name: service.name || '', photoUrl: service.photoUrl || '' })));
+  return JSON.stringify(list.map(service => ({
+    name: service.name || '',
+    photoUrl: service.photoUrl || '',
+    durationMinutes: normalizeDuration(service.durationMinutes || 60),
+  })));
 }
 
 function normalizeDateKey(rawDate) {
@@ -411,6 +444,10 @@ function renderServiceCards() {
     title.className = 'service-card-name';
     title.textContent = service.name || 'Untitled service';
 
+    const duration = document.createElement('div');
+    duration.className = 'service-card-duration';
+    duration.textContent = `${normalizeDuration(service.durationMinutes)} min`;
+
     const actions = document.createElement('div');
     actions.className = 'service-card-actions';
 
@@ -430,6 +467,7 @@ function renderServiceCards() {
     actions.appendChild(deleteButton);
     card.appendChild(image);
     card.appendChild(title);
+    card.appendChild(duration);
     card.appendChild(actions);
     elements.serviceCards.appendChild(card);
   });
@@ -439,6 +477,7 @@ function populateServiceForm(index) {
   const service = state.serviceList[index];
   if (!service) return;
   elements.serviceName.value = service.name;
+  elements.serviceDuration.value = normalizeDuration(service.durationMinutes);
   elements.servicePhotoFile.value = '';
   renderImagePreview(elements.servicePhotoPreview, service.photoUrl ? [service.photoUrl] : [], 'Choose a photo from your device.');
   elements.serviceForm.dataset.editIndex = String(index);
@@ -447,6 +486,7 @@ function populateServiceForm(index) {
 
 function clearServiceForm() {
   elements.serviceName.value = '';
+  elements.serviceDuration.value = '60';
   elements.servicePhotoFile.value = '';
   if (elements.servicePhotoPreview) {
     elements.servicePhotoPreview.innerHTML = 'Choose a photo from your device.';
@@ -466,10 +506,11 @@ async function deleteService(index) {
   }
 }
 
-async function uploadFiles(files) {
+async function uploadFiles(files, type = 'photos') {
   const fileList = [...files];
   if (!fileList.length) return [];
   const formData = new FormData();
+  formData.append('type', type);
   fileList.forEach(file => formData.append('photos', file));
   const response = await fetch(`${API_BASE}/upload`, {
     method: 'POST',
@@ -495,6 +536,7 @@ async function saveCurrentServices() {
 async function addOrUpdateService(event) {
   event.preventDefault();
   const name = elements.serviceName.value.trim();
+  const durationMinutes = normalizeDuration(elements.serviceDuration.value);
   if (!name) {
     showToast('Service name is required.');
     return;
@@ -505,8 +547,8 @@ async function addOrUpdateService(event) {
     const existing = (!Number.isNaN(existingIndex) && existingIndex >= 0 && existingIndex < state.serviceList.length)
       ? state.serviceList[existingIndex]
       : null;
-    const uploaded = await uploadFiles(elements.servicePhotoFile.files);
-    const serviceData = { name, photoUrl: uploaded[0] || existing?.photoUrl || '' };
+    const uploaded = await uploadFiles(elements.servicePhotoFile.files, 'services');
+    const serviceData = { name, durationMinutes, photoUrl: uploaded[0] || existing?.photoUrl || '' };
 
     if (existing) {
       state.serviceList[existingIndex] = serviceData;
@@ -600,6 +642,12 @@ async function fetchAppointments() {
   return state.appointments;
 }
 
+async function fetchAvailability() {
+  const data = await apiCall('/availability/me', { method: 'GET' });
+  state.availabilityTimes = data || [];
+  return state.availabilityTimes;
+}
+
 async function fetchDayOffs() {
   const data = await apiCall('/dayoffs', { method: 'GET' });
   // Regular barbers only see their own day-offs. Boss/senior see the full shop.
@@ -624,7 +672,8 @@ function renderTab(tabName) {
 
 function renderProfileForm() {
   if (!state.user) return;
-  state.serviceList = parseServiceList(state.user.services);
+  // Keep serviceList for now (will be migrated to dedicated services table later)
+  	state.serviceList = parseServiceList(state.user.services);
   elements.profileName.value = state.user.name;
   elements.profileBio.value = state.user.bio || '';
   elements.profileInstagram.value = state.user.instagram || '';
@@ -762,6 +811,34 @@ function renderAppointmentsCalendar() {
   }
 }
 
+function renderAppointmentsList() {
+  if (!elements.appointmentsList) return;
+  elements.appointmentsList.innerHTML = '';
+  const appointments = state.appointments
+    .slice()
+    .sort((a, b) => `${normalizeDateKey(a.appointment_date)} ${a.appointment_time}`.localeCompare(`${normalizeDateKey(b.appointment_date)} ${b.appointment_time}`));
+
+  if (!appointments.length) {
+    elements.appointmentsList.innerHTML = '<p>No appointments yet.</p>';
+    return;
+  }
+
+  appointments.forEach(appt => {
+    const barber = state.barbers.find(b => b.id === appt.barber_id);
+    const item = document.createElement('div');
+    item.className = 'dayoff-item';
+    item.innerHTML = `
+      <div class="dayoff-item-info">
+        <strong>${formatIsoDateShort(appt.appointment_date)} at ${appt.appointment_time}</strong>
+        <p>${appt.client_name} - ${appt.client_phone}</p>
+        ${appt.service_type ? `<p>${appt.service_type}${appt.duration_minutes ? ` (${appt.duration_minutes} min)` : ''}</p>` : ''}
+        ${barber ? `<p>${barber.name}</p>` : ''}
+      </div>
+    `;
+    elements.appointmentsList.appendChild(item);
+  });
+}
+
 function showDayAppointments(dateKey, appointments) {
   state.selectedApptDate = dateKey;
   elements.dayAppointmentsList.innerHTML = `<h4>Appointments for ${formatIsoDateShort(dateKey)}</h4>`;
@@ -865,7 +942,7 @@ function renderStaffList() {
 
     const canManage = state.user && (state.user.role === 'BOSS' || state.user.role === 'SENIOR_BARBER');
     if (canManage && barber.id !== state.user.id) {
-      if (normalizedBarberRole === 'JUNIOR_BARBER' && state.user.role === 'SENIOR_BARBER') {
+      if (normalizedBarberRole === 'JUNIOR_BARBER' && (state.user.role === 'BOSS' || state.user.role === 'SENIOR_BARBER')) {
         const promoteButton = document.createElement('button');
         promoteButton.className = 'btn btn-small';
         promoteButton.textContent = 'Make barber';
@@ -1045,6 +1122,39 @@ function renderDayOffs() {
   });
 }
 
+function renderAvailabilityTimes() {
+  if (!elements.availabilityList) return;
+  elements.availabilityList.innerHTML = '';
+  if (!state.availabilityTimes.length) {
+    elements.availabilityList.innerHTML = '<p>Default shop times are being used. Add your own times to customize them.</p>';
+    return;
+  }
+
+  state.availabilityTimes.forEach(slot => {
+    const item = document.createElement('div');
+    item.className = 'dayoff-item';
+    item.innerHTML = `
+      <div class="dayoff-item-info">
+        <strong>${slot.time_label}</strong>
+      </div>
+      <button class="dayoff-item-delete" type="button" data-id="${slot.id}">Delete</button>
+    `;
+    elements.availabilityList.appendChild(item);
+  });
+
+  elements.availabilityList.querySelectorAll('.dayoff-item-delete').forEach(button => {
+    button.addEventListener('click', async () => {
+      try {
+        await apiCall(`/availability/${button.dataset.id}`, { method: 'DELETE' });
+        showToast('Time deleted.');
+        await refreshAvailability();
+      } catch (error) {
+        showToast('Could not delete time: ' + error.message);
+      }
+    });
+  });
+}
+
 function renderWorkPhotoFilePreview() {
   renderFilePreview(elements.workPhotoFiles, elements.workPhotoPreview, 'Choose work photos to preview.');
 }
@@ -1087,18 +1197,25 @@ async function handleSaveProfile(event) {
   event.preventDefault();
   if (!state.user) return;
   try {
+    const name = elements.profileName.value.trim();
     const bio = elements.profileBio.value.trim();
     const instagram = elements.profileInstagram.value.trim();
     const tiktok = elements.profileTiktok.value.trim();
-    const profileUploads = await uploadFiles(elements.profilePhotoFile.files);
-    const workUploads = await uploadFiles(elements.workPhotoFiles.files);
+    if (!name) {
+      showToast('Name is required.');
+      return;
+    }
+    const profileUploads = await uploadFiles(elements.profilePhotoFile.files, 'profile');
+    const workUploads = await uploadFiles(elements.workPhotoFiles.files, 'work');
     const profilePhotoUrl = profileUploads[0] || state.user.profile_photo_url || null;
     const photoUrls = [...normalizePhotoUrls(state.user.photo_urls), ...workUploads];
     const updated = await apiCall(`/barbers/${state.user.id}`, {
       method: 'PUT',
-      body: JSON.stringify({ bio, instagram, tiktok, profilePhotoUrl, photoUrls }),
+      body: JSON.stringify({ name, bio, instagram, tiktok, profilePhotoUrl, photoUrls }),
     });
     state.user = { ...state.user, ...updated };
+    elements.dashboardTitle.textContent = `Hello, ${state.user.name}`;
+    localStorage.setItem('zigzagStaffUser', JSON.stringify(state.user));
     elements.profilePhotoFile.value = '';
     elements.workPhotoFiles.value = '';
     elements.workPhotoPreview.innerHTML = '';
@@ -1175,6 +1292,26 @@ async function handleDayoffSubmit(event) {
   }
 }
 
+async function handleAvailabilitySubmit(event) {
+  event.preventDefault();
+  const time = elements.availabilityTime.value;
+  if (!time) {
+    showToast('Choose a time first.');
+    return;
+  }
+  try {
+    await apiCall('/availability', {
+      method: 'POST',
+      body: JSON.stringify({ time }),
+    });
+    elements.availabilityForm.reset();
+    showToast('Available time added.');
+    await refreshAvailability();
+  } catch (error) {
+    showToast('Could not add time: ' + error.message);
+  }
+}
+
 async function refreshBarbers() {
   await fetchBarbers();
   renderStaffList();
@@ -1183,6 +1320,7 @@ async function refreshBarbers() {
 async function refreshAppointments() {
   await fetchAppointments();
   renderAppointmentsCalendar();
+  renderAppointmentsList();
   if (state.selectedApptDate) {
     const appointments = state.appointments.filter(appt => normalizeDateKey(appt.appointment_date) === state.selectedApptDate);
     showDayAppointments(state.selectedApptDate, appointments);
@@ -1193,6 +1331,11 @@ async function refreshDayOffs() {
   await fetchDayOffs();
   renderDayOffsCalendar();
   renderDayOffs();
+}
+
+async function refreshAvailability() {
+  await fetchAvailability();
+  renderAvailabilityTimes();
 }
 
 async function refreshAll() {
@@ -1215,7 +1358,8 @@ async function refreshAll() {
   dayoffTab?.classList.remove('hidden');
   renderTab('appointments');
 
-  await Promise.all([refreshAppointments(), refreshBarbers(), refreshDayOffs()]);
+  await Promise.all([refreshBarbers(), refreshDayOffs(), refreshAvailability()]);
+  await refreshAppointments();
   renderProfileForm();
 }
 
@@ -1247,6 +1391,7 @@ async function init() {
   elements.logoutButton.addEventListener('click', logout);
   elements.profileForm.addEventListener('submit', handleSaveProfile);
   elements.serviceForm.addEventListener('submit', addOrUpdateService);
+  elements.availabilityForm.addEventListener('submit', handleAvailabilitySubmit);
   elements.profilePhotoFile.addEventListener('change', renderProfilePhotoFilePreview);
   elements.workPhotoFiles.addEventListener('change', renderWorkPhotoFilePreview);
   elements.servicePhotoFile.addEventListener('change', renderServicePhotoFilePreview);

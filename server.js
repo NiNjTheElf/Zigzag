@@ -11,6 +11,9 @@ const app = express();
 
 const uploadsDir = path.join(__dirname, 'uploads');
 fs.mkdirSync(uploadsDir, { recursive: true });
+const SUPABASE_URL = (process.env.SUPABASE_URL || '').replace(/\/$/, '');
+const SUPABASE_KEY = process.env.SUPABASE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const SUPABASE_STORAGE_BUCKET = process.env.SUPABASE_STORAGE_BUCKET || 'profilePhoto';
 
 // Middleware
 app.use(cors());
@@ -18,13 +21,7 @@ app.use(express.json());
 app.use(express.static('./'));
 app.use('/uploads', express.static(uploadsDir));
 
-const storage = multer.diskStorage({
-  destination: uploadsDir,
-  filename: (req, file, cb) => {
-    const safeName = file.originalname.replace(/[^a-zA-Z0-9.\-]/g, '_');
-    cb(null, `${Date.now()}-${safeName}`);
-  }
-});
+const storage = multer.memoryStorage();
 const upload = multer({ storage, limits: { fileSize: 8 * 1024 * 1024 } });
 
 const { Pool } = require('pg');
@@ -48,6 +45,28 @@ pool.connect((err, client, release) => {
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret_key_change_in_production';
 const SLOT_TIMES = ['10:00 AM', '11:30 AM', '1:00 PM', '2:30 PM', '4:00 PM', '5:30 PM'];
+const DEFAULT_SERVICE_DURATION = 60;
+
+async function ensureRuntimeSchema() {
+  await pool.query('ALTER TABLE "appointments" ADD COLUMN IF NOT EXISTS "duration_minutes" INTEGER NOT NULL DEFAULT 60');
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "barber_available_times" (
+      "id" SERIAL PRIMARY KEY,
+      "barber_id" INTEGER NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+      "time_label" TEXT NOT NULL,
+      "sort_minutes" INTEGER NOT NULL,
+      "created_at" TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE ("barber_id", "sort_minutes")
+    )
+  `);
+  await pool.query('CREATE INDEX IF NOT EXISTS "appointments_barber_date_idx" ON "appointments" ("barber_id", "appointment_date")');
+  await pool.query('CREATE INDEX IF NOT EXISTS "day_offs_barber_date_idx" ON "day_offs" ("barber_id", "day_off_date")');
+  await pool.query('CREATE INDEX IF NOT EXISTS "barber_available_times_barber_sort_idx" ON "barber_available_times" ("barber_id", "sort_minutes")');
+}
+
+ensureRuntimeSchema().catch(error => {
+  console.error('Failed to prepare database schema', error);
+});
 
 // Helper function to normalize user object
 function normalizeUser(dbUser) {
@@ -59,10 +78,172 @@ function normalizeUser(dbUser) {
     bio: dbUser.bio,
     instagram: dbUser.instagram,
     tiktok: dbUser.tiktok,
+    profile_photo_url: dbUser.profile_photo_url,
+    photo_urls: dbUser.photo_urls,
     profilePhotoUrl: dbUser.profile_photo_url,
     photoUrls: dbUser.photo_urls,
     services: dbUser.services
   };
+}
+
+function normalizeRole(role) {
+  return String(role || '').trim().toUpperCase();
+}
+
+function parseServiceList(rawServices) {
+  if (!rawServices) return [];
+  if (Array.isArray(rawServices)) {
+    return rawServices.map(item => (typeof item === 'string' ? { name: item } : item));
+  }
+  if (typeof rawServices !== 'string') return [];
+
+  const trimmed = rawServices.trim();
+  if (!trimmed) return [];
+  if (trimmed.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      return Array.isArray(parsed)
+        ? parsed.map(item => (typeof item === 'string' ? { name: item } : item))
+        : [];
+    } catch {
+      // Legacy parsing below.
+    }
+  }
+
+  const parts = trimmed.split(';').map(s => s.trim()).filter(Boolean);
+  const services = [];
+  parts.forEach(part => {
+    const [category, items] = part.split(':').map(s => s.trim());
+    if (!items) return;
+    items.split(',').map(item => item.trim()).filter(Boolean).forEach(item => {
+      services.push({ name: `${category} - ${item}` });
+    });
+  });
+  return services.length ? services : [{ name: trimmed }];
+}
+
+function normalizeDuration(value) {
+  const duration = parseInt(value, 10);
+  if (!Number.isFinite(duration)) return DEFAULT_SERVICE_DURATION;
+  return Math.min(Math.max(duration, 5), 480);
+}
+
+function parseTimeToMinutes(label) {
+  if (!label) return null;
+  const text = String(label).trim();
+  const match = text.match(/^(\d{1,2}):(\d{2})(?:\s*([AP]M))?$/i);
+  if (!match) return null;
+  let hours = parseInt(match[1], 10);
+  const minutes = parseInt(match[2], 10);
+  const meridiem = match[3] ? match[3].toUpperCase() : '';
+  if (minutes < 0 || minutes > 59) return null;
+  if (meridiem) {
+    if (hours < 1 || hours > 12) return null;
+    if (meridiem === 'PM' && hours !== 12) hours += 12;
+    if (meridiem === 'AM' && hours === 12) hours = 0;
+  } else if (hours < 0 || hours > 23) {
+    return null;
+  }
+  return hours * 60 + minutes;
+}
+
+function formatMinutesToLabel(totalMinutes) {
+  const minutesInDay = ((totalMinutes % 1440) + 1440) % 1440;
+  const hours24 = Math.floor(minutesInDay / 60);
+  const minutes = minutesInDay % 60;
+  const suffix = hours24 >= 12 ? 'PM' : 'AM';
+  const hours12 = hours24 % 12 || 12;
+  return `${hours12}:${String(minutes).padStart(2, '0')} ${suffix}`;
+}
+
+function intervalsOverlap(startA, endA, startB, endB) {
+  return startA < endB && startB < endA;
+}
+
+function getDurationFromServices(rawServices, serviceType, fallback = DEFAULT_SERVICE_DURATION) {
+  const services = parseServiceList(rawServices);
+  const match = services.find(service => String(service.name || '').trim() === String(serviceType || '').trim());
+  return normalizeDuration(match?.durationMinutes || match?.duration || fallback);
+}
+
+async function getBarberServices(barberId) {
+  const result = await pool.query('SELECT "services" FROM "users" WHERE "id" = $1', [barberId]);
+  return result.rows[0]?.services || '';
+}
+
+async function resolveAppointmentDuration(barberId, serviceType, requestedDuration) {
+  if (requestedDuration !== undefined && requestedDuration !== null && requestedDuration !== '') {
+    return normalizeDuration(requestedDuration);
+  }
+  const services = await getBarberServices(barberId);
+  return getDurationFromServices(services, serviceType);
+}
+
+async function getBarberAvailableTimes(barberId) {
+  const result = await pool.query(
+    'SELECT "id", "time_label", "sort_minutes" FROM "barber_available_times" WHERE "barber_id" = $1 ORDER BY "sort_minutes"',
+    [barberId]
+  );
+  if (result.rows.length) return result.rows;
+  return SLOT_TIMES.map(time => ({
+    id: null,
+    time_label: time,
+    sort_minutes: parseTimeToMinutes(time),
+  }));
+}
+
+async function getBookedIntervals(barberId, date, ignoreAppointmentId = null) {
+  let query = 'SELECT "id", "appointment_time", "service_type", "duration_minutes" FROM "appointments" WHERE "barber_id" = $1 AND "appointment_date" = $2';
+  const params = [barberId, date];
+  if (ignoreAppointmentId) {
+    query += ' AND "id" != $3';
+    params.push(ignoreAppointmentId);
+  }
+  const result = await pool.query(query, params);
+  const services = await getBarberServices(barberId);
+  return result.rows.map(row => {
+    const start = parseTimeToMinutes(row.appointment_time);
+    const duration = normalizeDuration(row.duration_minutes || getDurationFromServices(services, row.service_type));
+    return start === null ? null : { start, end: start + duration };
+  }).filter(Boolean);
+}
+
+async function isTimeAvailable(barberId, date, time, durationMinutes, ignoreAppointmentId = null) {
+  const start = parseTimeToMinutes(time);
+  if (start === null) return false;
+  const slots = await getBarberAvailableTimes(barberId);
+  const matchesSlot = slots.some(slot => slot.sort_minutes === start || slot.time_label === time);
+  if (!matchesSlot) return false;
+  const bookedIntervals = await getBookedIntervals(barberId, date, ignoreAppointmentId);
+  return !bookedIntervals.some(interval => intervalsOverlap(start, start + durationMinutes, interval.start, interval.end));
+}
+
+function getSafeUploadName(originalName) {
+  return String(originalName || 'photo').replace(/[^a-zA-Z0-9.\-]/g, '_');
+}
+
+function getPublicStorageUrl(objectPath) {
+  const encodedPath = objectPath.split('/').map(encodeURIComponent).join('/');
+  return `${SUPABASE_URL}/storage/v1/object/public/${SUPABASE_STORAGE_BUCKET}/${encodedPath}`;
+}
+
+async function uploadFileToSupabase(file, objectPath) {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return null;
+  const response = await fetch(`${SUPABASE_URL}/storage/v1/object/${SUPABASE_STORAGE_BUCKET}/${objectPath}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+      apikey: SUPABASE_KEY,
+      'Content-Type': file.mimetype || 'application/octet-stream',
+      'x-upsert': 'false',
+    },
+    body: file.buffer,
+  });
+  if (!response.ok) {
+    const details = await response.text().catch(() => 'Upload failed');
+    throw new Error(`Supabase upload failed: ${details}`);
+  }
+  return getPublicStorageUrl(objectPath);
 }
 
 // Auth middleware
@@ -104,6 +285,8 @@ app.post('/api/auth/login', async (req, res) => {
         name: user.name, 
         email: user.email, 
         role: user.role, 
+        profile_photo_url: user.profile_photo_url,
+        photo_urls: user.photo_urls,
         profilePhotoUrl: user.profile_photo_url, 
         photoUrls: user.photo_urls 
       } 
@@ -155,6 +338,7 @@ app.post('/api/barbers', authenticateToken, async (req, res) => {
   }
 
   const { name, email, password, role, bio, instagram, tiktok, profilePhotoUrl, photoUrls, services } = req.body;
+  const requestedRole = normalizeRole(role) || 'BARBER';
   
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -163,7 +347,7 @@ app.post('/api/barbers', authenticateToken, async (req, res) => {
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING id, name, email, role`;
     
-    const values = [name, email.toLowerCase(), hashedPassword, role, bio, instagram, tiktok, profilePhotoUrl, photoUrls || [], services];
+    const values = [name, email.toLowerCase(), hashedPassword, requestedRole, bio, instagram, tiktok, profilePhotoUrl, photoUrls || [], services];
     const result = await pool.query(query, values);
     
     res.status(201).json(result.rows[0]);
@@ -182,10 +366,10 @@ app.put('/api/barbers/:id', authenticateToken, async (req, res) => {
     return res.status(400).json({ error: 'Invalid barber ID' });
   }
 
-  const { bio, instagram, tiktok, profilePhotoUrl, photoUrls, services, role } = req.body;
+  const { name, bio, instagram, tiktok, profilePhotoUrl, photoUrls, services, role } = req.body;
   try {
     const existingResult = await pool.query(
-      'SELECT role, bio, instagram, tiktok, profile_photo_url, photo_urls, services FROM "users" WHERE id = $1',
+      'SELECT name, role, bio, instagram, tiktok, profile_photo_url, photo_urls, services FROM "users" WHERE id = $1',
       [barberId]
     );
     if (existingResult.rows.length === 0) {
@@ -201,11 +385,12 @@ app.put('/api/barbers/:id', authenticateToken, async (req, res) => {
     let desiredRole = targetRole;
     const validRoles = ['BOSS', 'SENIOR_BARBER', 'BARBER', 'JUNIOR_BARBER'];
 
-    if (role && role !== targetRole) {
+    const requestedRole = normalizeRole(role);
+    if (requestedRole && requestedRole !== targetRole) {
       if (req.user.role === 'BOSS') {
-        desiredRole = validRoles.includes(role) ? role : targetRole;
+        desiredRole = validRoles.includes(requestedRole) ? requestedRole : targetRole;
       } else if (req.user.role === 'SENIOR_BARBER') {
-        if (targetRole === 'JUNIOR_BARBER' && role === 'BARBER') {
+        if (targetRole === 'JUNIOR_BARBER' && requestedRole === 'BARBER') {
           desiredRole = 'BARBER';
         } else {
           return res.status(403).json({ error: 'Senior barber can only change junior barber to regular barber' });
@@ -215,7 +400,7 @@ app.put('/api/barbers/:id', authenticateToken, async (req, res) => {
       }
     }
 
-    if (req.user.id === barberId && role && role !== targetRole) {
+    if (req.user.id === barberId && requestedRole && requestedRole !== targetRole) {
       return res.status(403).json({ error: 'You cannot change your own role' });
     }
 
@@ -223,6 +408,14 @@ app.put('/api/barbers/:id', authenticateToken, async (req, res) => {
     const values = [];
     let paramCount = 1;
 
+    if (name !== undefined) {
+      const cleanName = String(name).trim();
+      if (!cleanName) {
+        return res.status(400).json({ error: 'Name cannot be empty' });
+      }
+      updates.push(`name = $${paramCount++}`);
+      values.push(cleanName);
+    }
     if (bio !== undefined) {
       updates.push(`bio = $${paramCount++}`);
       values.push(bio);
@@ -323,8 +516,8 @@ app.get('/api/appointments', authenticateToken, async (req, res) => {
     const params = [];
     const conditions = [];
 
-    // Only boss can see all appointments. Senior barbers and regular barbers only see their own
-    if (req.user.role !== 'BOSS') {
+    const isManager = req.user.role === 'BOSS' || req.user.role === 'SENIOR_BARBER';
+    if (!isManager) {
       conditions.push('barber_id = $' + (params.length + 1));
       params.push(req.user.id);
     } else if (barberId) {
@@ -360,7 +553,8 @@ app.get('/api/appointments/month/:year/:month', authenticateToken, async (req, r
     let query = 'SELECT * FROM "appointments" WHERE "appointment_date" BETWEEN $1 AND $2';
     const params = [startDate, endDate];
 
-    if (req.user.role !== 'BOSS') {
+    const isManager = req.user.role === 'BOSS' || req.user.role === 'SENIOR_BARBER';
+    if (!isManager) {
       query += ' AND barber_id = $3';
       params.push(req.user.id);
     } else if (barberId) {
@@ -379,27 +573,28 @@ app.get('/api/appointments/month/:year/:month', authenticateToken, async (req, r
 });
 
 app.get('/api/appointments/available', async (req, res) => {
-  const { barberId, date } = req.query;
+  const { barberId, date, serviceType, durationMinutes } = req.query;
+  const parsedBarberId = parseInt(barberId);
+  if (isNaN(parsedBarberId) || !date) {
+    return res.status(400).json({ error: 'Barber and date are required' });
+  }
   try {
-    // Get booked slots
-    const bookedResult = await pool.query(
-      'SELECT "appointment_time" FROM "appointments" WHERE "barber_id" = $1 AND "appointment_date" = $2',
-      [parseInt(barberId), date]
-    );
-    const bookedTimes = bookedResult.rows.map(row => row.appointment_time);
-
-    // Check day offs
     const dayOffResult = await pool.query(
       'SELECT * FROM "day_offs" WHERE "barber_id" = $1 AND ("day_off_date" = $2 OR ("is_recurring" = true AND "recurring_day_of_week" = $3))',
-      [parseInt(barberId), date, parseDateString(date).getDay()]
+      [parsedBarberId, date, parseDateString(date).getDay()]
     );
 
     if (dayOffResult.rows.length > 0) {
       return res.json({ available: [], isDayOff: true });
     }
 
-    const available = SLOT_TIMES.filter(time => !bookedTimes.includes(time));
-    res.json({ available, isDayOff: false });
+    const duration = await resolveAppointmentDuration(parsedBarberId, serviceType, durationMinutes);
+    const slots = await getBarberAvailableTimes(parsedBarberId);
+    const bookedIntervals = await getBookedIntervals(parsedBarberId, date);
+    const available = slots
+      .filter(slot => !bookedIntervals.some(interval => intervalsOverlap(slot.sort_minutes, slot.sort_minutes + duration, interval.start, interval.end)))
+      .map(slot => slot.time_label);
+    res.json({ available, isDayOff: false, durationMinutes: duration });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to fetch available slots' });
@@ -407,29 +602,30 @@ app.get('/api/appointments/available', async (req, res) => {
 });
 
 app.post('/api/appointments', async (req, res) => {
-  const { barberId, date, time, clientName, clientPhone, serviceType } = req.body;
+  const { barberId, date, time, clientName, clientPhone, serviceType, durationMinutes } = req.body;
+  const parsedBarberId = parseInt(barberId);
+  if (isNaN(parsedBarberId) || !date || !time || !clientName || !clientPhone) {
+    return res.status(400).json({ error: 'Missing appointment details' });
+  }
   try {
+    const duration = await resolveAppointmentDuration(parsedBarberId, serviceType, durationMinutes);
     const checkDayOff = await pool.query(
       'SELECT * FROM "day_offs" WHERE "barber_id" = $1 AND ("day_off_date" = $2 OR ("is_recurring" = true AND "recurring_day_of_week" = $3))',
-      [parseInt(barberId), date, parseDateString(date).getDay()]
+      [parsedBarberId, date, parseDateString(date).getDay()]
     );
 
     if (checkDayOff.rows.length > 0) {
       return res.status(400).json({ error: 'Barber is off on this date' });
     }
 
-    const checkBooked = await pool.query(
-      'SELECT "id" FROM "appointments" WHERE "barber_id" = $1 AND "appointment_date" = $2 AND "appointment_time" = $3',
-      [parseInt(barberId), date, time]
-    );
-
-    if (checkBooked.rows.length > 0) {
+    const available = await isTimeAvailable(parsedBarberId, date, time, duration);
+    if (!available) {
       return res.status(400).json({ error: 'Time slot is no longer available' });
     }
 
     const result = await pool.query(
-      'INSERT INTO "appointments" ("barber_id", "client_name", "client_phone", "appointment_date", "appointment_time", "service_type") VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
-      [parseInt(barberId), clientName, clientPhone, date, time, serviceType || 'Haircut']
+      'INSERT INTO "appointments" ("barber_id", "client_name", "client_phone", "appointment_date", "appointment_time", "service_type", "duration_minutes") VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+      [parsedBarberId, clientName, clientPhone, date, time, serviceType || 'Haircut', duration]
     );
 
     console.log('Appointment booked:', result.rows[0]);
@@ -478,12 +674,9 @@ app.post('/api/appointments/:id/move-next-day', authenticateToken, async (req, r
       return res.status(400).json({ error: 'Barber is off on the next day' });
     }
 
-    const bookedResult = await pool.query(
-      'SELECT id FROM appointments WHERE barber_id = $1 AND appointment_date = $2 AND appointment_time = $3',
-      [appointment.barber_id, nextDate, appointment.appointment_time]
-    );
-
-    if (bookedResult.rows.length > 0) {
+    const duration = normalizeDuration(appointment.duration_minutes || await resolveAppointmentDuration(appointment.barber_id, appointment.service_type));
+    const available = await isTimeAvailable(appointment.barber_id, nextDate, appointment.appointment_time, duration, appointmentId);
+    if (!available) {
       return res.status(400).json({ error: 'The same time slot is already booked on the next day' });
     }
 
@@ -527,12 +720,9 @@ app.post('/api/appointments/:id/reschedule', authenticateToken, async (req, res)
       return res.status(400).json({ error: 'Barber is off on the selected date' });
     }
 
-    const bookedResult = await pool.query(
-      'SELECT "id" FROM "appointments" WHERE "barber_id" = $1 AND "appointment_date" = $2 AND "appointment_time" = $3 AND "id" != $4',
-      [appointment.barber_id, date, time, appointmentId]
-    );
-
-    if (bookedResult.rows.length > 0) {
+    const duration = normalizeDuration(appointment.duration_minutes || await resolveAppointmentDuration(appointment.barber_id, appointment.service_type));
+    const available = await isTimeAvailable(appointment.barber_id, date, time, duration, appointmentId);
+    if (!available) {
       return res.status(400).json({ error: 'Selected slot is already booked' });
     }
 
@@ -577,12 +767,91 @@ app.delete('/api/appointments/:id', authenticateToken, async (req, res) => {
   }
 });
 
-app.post('/api/upload', authenticateToken, upload.array('photos', 12), (req, res) => {
+app.post('/api/upload', authenticateToken, upload.array('photos', 12), async (req, res) => {
   if (!req.files || req.files.length === 0) {
     return res.status(400).json({ error: 'No files uploaded' });
   }
-  const uploaded = req.files.map(file => `/uploads/${file.filename}`);
-  res.json({ uploaded });
+  try {
+    const type = String(req.body.type || 'photos').replace(/[^a-zA-Z0-9_-]/g, '') || 'photos';
+    const uploaded = [];
+
+    for (const [index, file] of req.files.entries()) {
+      const safeName = getSafeUploadName(file.originalname);
+      const objectPath = `user-${req.user.id}/${type}/${Date.now()}-${index}-${safeName}`;
+      const supabaseUrl = await uploadFileToSupabase(file, objectPath);
+
+      if (supabaseUrl) {
+        uploaded.push(supabaseUrl);
+      } else {
+        const filename = `${Date.now()}-${index}-${safeName}`;
+        fs.writeFileSync(path.join(uploadsDir, filename), file.buffer);
+        uploaded.push(`/uploads/${filename}`);
+      }
+    }
+
+    res.json({ uploaded });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: error.message || 'Upload failed' });
+  }
+});
+
+// ==================== AVAILABILITY ROUTES ====================
+
+app.get('/api/availability/me', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT "id", "time_label", "sort_minutes" FROM "barber_available_times" WHERE "barber_id" = $1 ORDER BY "sort_minutes"',
+      [req.user.id]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to fetch availability times' });
+  }
+});
+
+app.post('/api/availability', authenticateToken, async (req, res) => {
+  const minutes = parseTimeToMinutes(req.body.time);
+  if (minutes === null) {
+    return res.status(400).json({ error: 'Enter a valid time' });
+  }
+
+  try {
+    const label = formatMinutesToLabel(minutes);
+    const result = await pool.query(
+      `INSERT INTO "barber_available_times" ("barber_id", "time_label", "sort_minutes")
+       VALUES ($1, $2, $3)
+       ON CONFLICT ("barber_id", "sort_minutes") DO UPDATE SET "time_label" = EXCLUDED."time_label"
+       RETURNING "id", "time_label", "sort_minutes"`,
+      [req.user.id, label, minutes]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to save availability time' });
+  }
+});
+
+app.delete('/api/availability/:id', authenticateToken, async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) {
+    return res.status(400).json({ error: 'Invalid availability time' });
+  }
+
+  try {
+    const result = await pool.query(
+      'DELETE FROM "barber_available_times" WHERE "id" = $1 AND "barber_id" = $2 RETURNING "id"',
+      [id, req.user.id]
+    );
+    if (!result.rows.length) {
+      return res.status(404).json({ error: 'Availability time not found' });
+    }
+    res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to delete availability time' });
+  }
 });
 
 // ==================== DAY-OFF ROUTES ====================
@@ -593,8 +862,8 @@ app.get('/api/dayoffs', authenticateToken, async (req, res) => {
     let query = 'SELECT * FROM "day_offs" WHERE 1=1';
     const params = [];
 
-    // Only boss can see all day offs. Senior barbers and regular barbers only see their own
-    if (req.user.role !== 'BOSS') {
+    const isManager = req.user.role === 'BOSS' || req.user.role === 'SENIOR_BARBER';
+    if (!isManager) {
       query += ' AND barber_id = $' + (params.length + 1);
       params.push(req.user.id);
     } else if (barberId) {
@@ -620,7 +889,8 @@ app.get('/api/dayoffs', authenticateToken, async (req, res) => {
 
 app.post('/api/dayoffs', authenticateToken, async (req, res) => {
   const { date, isRecurring, recurringDayOfWeek, notes } = req.body;
-  const barberId = (req.user.role === 'boss' || req.user.role === 'senior_barber') ? req.body.barberId : req.user.id;
+  const isManager = req.user.role === 'BOSS' || req.user.role === 'SENIOR_BARBER';
+  const barberId = isManager && req.body.barberId ? parseInt(req.body.barberId) : req.user.id;
 
   try {
     const result = await pool.query(
@@ -659,10 +929,11 @@ app.delete('/api/dayoffs/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
 
   try {
-    const query = (req.user.role === 'boss' || req.user.role === 'senior_barber')
+    const isManager = req.user.role === 'BOSS' || req.user.role === 'SENIOR_BARBER';
+    const query = isManager
       ? 'DELETE FROM "day_offs" WHERE "id" = $1 RETURNING "id"'
       : 'DELETE FROM "day_offs" WHERE "id" = $1 AND "barber_id" = $2 RETURNING "id"';
-    const params = (req.user.role === 'boss' || req.user.role === 'senior_barber')
+    const params = isManager
       ? [parseInt(id)]
       : [parseInt(id), req.user.id];
 

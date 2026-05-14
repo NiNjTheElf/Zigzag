@@ -64,7 +64,13 @@ function normalizePhotoUrls(photoData) {
 }
 
 function getProfilePhotoUrl(barber) {
-  return barber.profile_photo_url || normalizePhotoUrls(barber.photo_urls)[0] || '';
+  return barber.profile_photo_url || barber.profilePhotoUrl || normalizePhotoUrls(barber.photo_urls || barber.photoUrls)[0] || '';
+}
+
+function normalizeDuration(value) {
+  const duration = parseInt(value, 10);
+  if (!Number.isFinite(duration)) return 60;
+  return Math.min(Math.max(duration, 5), 480);
 }
 
 async function fetchBarbers() {
@@ -298,7 +304,7 @@ function renderBarberGallery() {
     elements.gallery.innerHTML = '<p>No barber selected yet.</p>';
     return;
   }
-  const urls = normalizePhotoUrls(barber.photo_urls);
+  const urls = normalizePhotoUrls(barber.photo_urls || barber.photoUrls);
   if (!urls.length) {
     elements.gallery.innerHTML = '<p>This barber has not uploaded any photos yet.</p>';
     return;
@@ -313,7 +319,12 @@ function renderBarberGallery() {
 
 function parseBarberServices(rawServices) {
   if (!rawServices) return [];
-  if (Array.isArray(rawServices)) return rawServices.map(item => (typeof item === 'string' ? { name: item } : item));
+  if (Array.isArray(rawServices)) {
+    return rawServices.map(item => {
+      if (typeof item === 'string') return { name: item, durationMinutes: 60 };
+      return { ...item, durationMinutes: normalizeDuration(item.durationMinutes || item.duration || 60) };
+    });
+  }
   if (typeof rawServices === 'string') {
     const trimmed = rawServices.trim();
     if (!trimmed) return [];
@@ -321,7 +332,10 @@ function parseBarberServices(rawServices) {
       try {
         const parsed = JSON.parse(trimmed);
         return Array.isArray(parsed)
-          ? parsed.map(item => (typeof item === 'string' ? { name: item } : item))
+          ? parsed.map(item => {
+              if (typeof item === 'string') return { name: item, durationMinutes: 60 };
+              return { ...item, durationMinutes: normalizeDuration(item.durationMinutes || item.duration || 60) };
+            })
           : [];
       } catch {
         // legacy fallthrough
@@ -333,11 +347,11 @@ function parseBarberServices(rawServices) {
       const [category, items] = part.split(':').map(s => s.trim());
       if (!items) return;
       items.split(',').map(item => item.trim()).filter(Boolean).forEach(item => {
-        services.push({ name: `${category} - ${item}` });
+        services.push({ name: `${category} - ${item}`, durationMinutes: 60 });
       });
     });
     if (services.length) return services;
-    return [{ name: trimmed }];
+    return [{ name: trimmed, durationMinutes: 60 }];
   }
   return [];
 }
@@ -370,9 +384,11 @@ function populateServiceSelect(barberId) {
   const services = barber ? parseBarberServices(barber.services) : [];
   const options = services.length ? services : [{ name: 'Haircut' }, { name: 'Beard' }, { name: 'Haircut + Beard' }];
   options.forEach((service, index) => {
+    const durationMinutes = normalizeDuration(service.durationMinutes || service.duration || 60);
     const option = document.createElement('option');
     option.value = service.name;
     option.textContent = service.name;
+    option.dataset.duration = String(durationMinutes);
     elements.bookingService.appendChild(option);
 
     const card = document.createElement('button');
@@ -380,16 +396,25 @@ function populateServiceSelect(barberId) {
     card.className = 'booking-service-option';
     if (index === 0) card.classList.add('selected');
     card.innerHTML = `
-      <span>${service.name}</span>
+      <span class="booking-service-text">
+        <span>${service.name}</span>
+        <small>${durationMinutes} min</small>
+      </span>
       ${service.photoUrl ? `<img src="${service.photoUrl}" alt="${service.name}" />` : '<span class="service-option-empty">No photo</span>'}
     `;
     card.addEventListener('click', () => {
       elements.bookingService.value = service.name;
       elements.bookingServiceOptions.querySelectorAll('.booking-service-option').forEach(btn => btn.classList.remove('selected'));
       card.classList.add('selected');
+      renderAvailableSlots();
     });
     elements.bookingServiceOptions.appendChild(card);
   });
+}
+
+function getSelectedServiceDuration() {
+  const option = elements.bookingService.selectedOptions[0];
+  return normalizeDuration(option?.dataset.duration || 60);
 }
 
 async function renderAvailableSlots() {
@@ -397,12 +422,20 @@ async function renderAvailableSlots() {
   elements.bookingTime.value = '';
   const barberId = elements.barberSelect.value;
   const date = elements.bookingDate.value;
+  const serviceType = elements.bookingService.value;
+  const durationMinutes = getSelectedServiceDuration();
   if (!barberId || !date) {
     elements.bookingSlots.innerHTML = '<div class="slot-message">Pick a barber and date to see open times.</div>';
     return;
   }
   try {
-    const data = await apiCall(`/appointments/available?barberId=${barberId}&date=${date}`, { method: 'GET' });
+    const params = new URLSearchParams({
+      barberId,
+      date,
+      serviceType: serviceType || '',
+      durationMinutes: String(durationMinutes),
+    });
+    const data = await apiCall(`/appointments/available?${params.toString()}`, { method: 'GET' });
     if (data.isDayOff) {
       elements.bookingSlots.innerHTML = '<div class="slot-message">This barber is off on the selected day.</div>';
       return;
@@ -434,6 +467,7 @@ async function handleBookingSubmit(event) {
   const time = elements.bookingTime.value;
   const clientName = elements.clientName.value.trim();
   const clientPhone = elements.clientPhone.value.trim();
+  const durationMinutes = getSelectedServiceDuration();
   if (!barberId || !date || !time || !clientName || !clientPhone || !elements.bookingService.value) {
     showToast('Complete all booking fields.');
     return;
@@ -441,7 +475,7 @@ async function handleBookingSubmit(event) {
   try {
     await apiCall('/appointments', {
       method: 'POST',
-      body: JSON.stringify({ barberId, date, time, clientName, clientPhone, serviceType: elements.bookingService.value }),
+      body: JSON.stringify({ barberId, date, time, clientName, clientPhone, serviceType: elements.bookingService.value, durationMinutes }),
     });
     showToast('Appointment booked successfully.');
     elements.bookingForm.reset();
@@ -463,8 +497,9 @@ function bindEvents() {
   elements.bookingDate.addEventListener('change', renderAvailableSlots);
   elements.bookingService.addEventListener('change', () => {
     elements.bookingServiceOptions.querySelectorAll('.booking-service-option').forEach(button => {
-      button.classList.toggle('selected', button.querySelector('span')?.textContent === elements.bookingService.value);
+      button.classList.toggle('selected', button.querySelector('.booking-service-text span')?.textContent === elements.bookingService.value);
     });
+    renderAvailableSlots();
   });
   elements.bookingForm.addEventListener('submit', handleBookingSubmit);
 }

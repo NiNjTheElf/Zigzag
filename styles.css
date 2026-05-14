@@ -646,6 +646,13 @@ button {
   font-weight: 800;
 }
 
+.service-card-duration,
+.booking-service-option small {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
 .service-card-actions,
 .staff-card-actions,
 .barber-social-links {
@@ -704,6 +711,16 @@ button {
   text-align: left;
   font-weight: 800;
   box-shadow: 0 8px 20px rgba(28, 32, 36, 0.06);
+}
+
+.booking-service-text,
+.booking-service-option small {
+  min-width: 0;
+}
+
+.booking-service-text {
+  display: grid;
+  gap: 4px;
 }
 
 .booking-service-option img,
