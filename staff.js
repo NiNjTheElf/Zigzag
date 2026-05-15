@@ -777,6 +777,9 @@ function renderAppointmentsCalendar() {
     } else if (date < today) {
       dayElement.classList.add('past');
     }
+    if (dateKey === state.selectedApptDate) {
+      dayElement.classList.add('selected-day');
+    }
 
     const appointments = appointmentMap[dateKey] || [];
     if (appointments.length > 0) {
@@ -798,10 +801,16 @@ function renderAppointmentsCalendar() {
         indicator.appendChild(dot);
       });
       dayElement.appendChild(indicator);
+
+      const appointmentCount = document.createElement('span');
+      appointmentCount.className = 'calendar-day-count';
+      appointmentCount.textContent = `${appointments.length} ${appointments.length === 1 ? 'booking' : 'bookings'}`;
+      dayElement.appendChild(appointmentCount);
     }
 
     dayElement.addEventListener('click', () => {
       showDayAppointments(dateKey, appointments);
+      renderAppointmentsCalendar();
     });
 
     elements.appointmentsCalendar.appendChild(dayElement);
@@ -1017,6 +1026,9 @@ function renderDayOffsCalendar() {
     } else if (date < today) {
       dayElement.classList.add('past');
     }
+    if (dateKey === state.selectedDayoffDate) {
+      dayElement.classList.add('selected-day');
+    }
 
     const dayOff = dayoffMap[dateKey];
     const dayOfWeek = date.getDay();
@@ -1032,6 +1044,13 @@ function renderDayOffsCalendar() {
     dayNumber.className = 'calendar-day-number';
     dayNumber.textContent = day;
     dayElement.appendChild(dayNumber);
+
+    if (dayOff || isRecurringDayOff) {
+      const status = document.createElement('span');
+      status.className = 'calendar-day-count';
+      status.textContent = dayOff ? 'Closed' : 'Weekly';
+      dayElement.appendChild(status);
+    }
 
     dayElement.addEventListener('click', () => {
       selectDayOffDate(date);
@@ -1055,6 +1074,7 @@ function selectDayOffDate(date) {
   if (elements.dayoffDate) {
     elements.dayoffDate.value = dateKey;
   }
+  renderDayOffCalendar();
   
   const appointmentsOnDate = state.appointments.filter(appt => normalizeDateKey(appt.appointment_date) === dateKey);
   if (appointmentsOnDate.length > 0) {

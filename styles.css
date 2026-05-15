@@ -3952,3 +3952,280 @@ body::after {
   color: #5f5f5f;
   border-top-color: rgba(0, 0, 0, 0.12);
 }
+
+/* Modern calendar refresh */
+.calendar-card,
+.booking-window-calendar {
+  --calendar-accent: #f2f2f2;
+  --calendar-accent-soft: rgba(255, 255, 255, 0.16);
+  --calendar-open: #d8d8d8;
+  --calendar-booked: #9db7ff;
+  --calendar-closed: #ff8f82;
+  overflow: hidden;
+  border-radius: 8px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.028) 44%),
+    rgba(42, 42, 42, 0.96);
+  box-shadow:
+    0 24px 54px rgba(0, 0, 0, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.calendar-card > h3 {
+  margin-bottom: 14px;
+}
+
+.calendar-controls,
+.booking-calendar-header {
+  padding: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.16);
+}
+
+.calendar-controls .btn,
+.booking-calendar-header .btn {
+  min-width: 42px;
+  height: 38px;
+  padding: 0;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: none;
+}
+
+.calendar-controls span,
+.booking-calendar-month {
+  min-width: 0;
+  color: #ffffff;
+  font-family: 'IBM Plex Sans Condensed', 'Segoe UI', sans-serif;
+  font-size: clamp(1rem, 2vw, 1.2rem);
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.calendar-grid {
+  gap: 6px;
+  padding-top: 4px;
+}
+
+.calendar-grid > div:not(.calendar-day) {
+  padding: 8px 4px 6px;
+  color: rgba(255, 255, 255, 0.58);
+  font-family: 'IBM Plex Sans Condensed', 'Segoe UI', sans-serif;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+}
+
+.calendar-day,
+#booking-calendar .calendar-day {
+  min-height: 92px;
+  aspect-ratio: auto;
+  border-radius: 8px;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.105), rgba(255, 255, 255, 0.028)),
+    rgba(20, 20, 20, 0.46);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+}
+
+.calendar-day::before,
+#booking-calendar .calendar-day::before,
+#booking-calendar .calendar-day.window-broken::after,
+#booking-calendar .calendar-day.window-closed::after {
+  display: none;
+}
+
+.calendar-day:hover,
+#booking-calendar .calendar-day:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.36);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.038)),
+    rgba(28, 28, 28, 0.72);
+  box-shadow:
+    0 14px 28px rgba(0, 0, 0, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.calendar-day-number {
+  display: inline-grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 8px;
+  color: #ffffff;
+  font-family: 'IBM Plex Sans Condensed', 'Segoe UI', sans-serif;
+  font-size: 1rem;
+  line-height: 1;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.calendar-day-indicator,
+.calendar-day-count {
+  align-self: stretch;
+  width: 100%;
+  min-height: 24px;
+  border-radius: 8px;
+  padding: 5px 7px;
+  color: rgba(255, 255, 255, 0.76);
+  background: rgba(0, 0, 0, 0.18);
+  font-family: 'IBM Plex Sans Condensed', 'Segoe UI', sans-serif;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.appointment-indicator {
+  gap: 5px;
+  margin-top: auto;
+}
+
+.appointment-dot {
+  width: 7px;
+  height: 7px;
+  background: var(--calendar-booked);
+  box-shadow: 0 0 0 3px rgba(157, 183, 255, 0.13);
+}
+
+.calendar-day.today,
+#booking-calendar .calendar-day.window-today {
+  border-color: rgba(255, 255, 255, 0.72);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.04)),
+    #191919;
+}
+
+.calendar-day.today .calendar-day-number,
+#booking-calendar .calendar-day.window-today .calendar-day-number {
+  background: #ffffff;
+  color: #101010;
+}
+
+.calendar-day.has-appointments,
+#booking-calendar .calendar-day.window-future {
+  border-color: rgba(127, 199, 178, 0.42);
+  background:
+    linear-gradient(180deg, rgba(127, 199, 178, 0.16), rgba(127, 199, 178, 0.035)),
+    rgba(24, 34, 32, 0.78);
+}
+
+.calendar-day.has-appointments .calendar-day-count,
+#booking-calendar .calendar-day.window-future .calendar-day-indicator {
+  color: #dff8f0;
+  background: rgba(127, 199, 178, 0.18);
+}
+
+#booking-calendar .calendar-day.window-future {
+  border-color: rgba(230, 230, 230, 0.42);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.035)),
+    rgba(40, 40, 40, 0.78);
+}
+
+#booking-calendar .calendar-day.window-future .calendar-day-indicator {
+  color: #f1f1f1;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.calendar-day.has-dayoff,
+.calendar-day.has-recurring-dayoff,
+#booking-calendar .calendar-day.window-closed {
+  border-color: rgba(255, 143, 130, 0.42);
+  background:
+    linear-gradient(180deg, rgba(255, 143, 130, 0.17), rgba(255, 143, 130, 0.04)),
+    rgba(40, 25, 24, 0.76);
+  color: #ffffff;
+}
+
+.calendar-day.has-dayoff .calendar-day-count,
+.calendar-day.has-recurring-dayoff .calendar-day-count,
+#booking-calendar .calendar-day.window-closed .calendar-day-indicator {
+  color: #ffe3df;
+  background: rgba(255, 143, 130, 0.17);
+}
+
+.calendar-day.past,
+#booking-calendar .calendar-day.window-broken {
+  opacity: 1;
+  color: rgba(255, 255, 255, 0.38);
+  border-color: rgba(255, 255, 255, 0.07);
+  background: rgba(0, 0, 0, 0.18);
+  box-shadow: none;
+}
+
+.calendar-day.past .calendar-day-number,
+#booking-calendar .calendar-day.window-broken .calendar-day-number {
+  color: rgba(255, 255, 255, 0.48);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.calendar-day.selected-day,
+.calendar-day.selected-off,
+#booking-calendar .calendar-day.window-selected {
+  outline: 0;
+  border-color: #ffffff;
+  box-shadow:
+    0 0 0 2px rgba(255, 255, 255, 0.22),
+    0 16px 30px rgba(0, 0, 0, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.calendar-day.other-month {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.booking-selected-date {
+  display: flex;
+  justify-content: center;
+  margin: 12px 0 0;
+  padding: 9px 10px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.2);
+  color: rgba(255, 255, 255, 0.86);
+  font-family: 'IBM Plex Sans Condensed', 'Segoe UI', sans-serif;
+  letter-spacing: 0;
+}
+
+@media (max-width: 760px) {
+  .calendar-day,
+  #booking-calendar .calendar-day {
+    min-height: 72px;
+    padding: 7px;
+  }
+
+  .calendar-day-number {
+    width: 26px;
+    height: 26px;
+    font-size: 0.88rem;
+  }
+
+  .calendar-day-indicator,
+  .calendar-day-count {
+    min-height: 20px;
+    padding: 4px 5px;
+    font-size: 0.58rem;
+  }
+}
+
+@media (max-width: 520px) {
+  .calendar-grid {
+    gap: 4px;
+  }
+
+  .calendar-day,
+  #booking-calendar .calendar-day {
+    min-height: 58px;
+    padding: 5px;
+  }
+
+  .appointment-indicator,
+  .calendar-day-count {
+    display: none;
+  }
+}
