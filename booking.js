@@ -1,4 +1,5 @@
 import { API_BASE } from './api-config.js';
+import { resetPhoneVerification, sendPhoneVerificationCode, verifyPhoneCode } from './phone-auth.js';
 const SLOT_TIMES = ['10:00 AM', '11:30 AM', '1:00 PM', '2:30 PM', '4:00 PM', '5:30 PM'];
 
 const elements = {
@@ -81,6 +82,7 @@ function getSelectedBarberName() {
 
 function resetPendingConfirmation() {
   state.pendingConfirmation = null;
+  resetPhoneVerification();
   if (elements.confirmationPanel) elements.confirmationPanel.classList.add('hidden');
   if (elements.confirmationCode) elements.confirmationCode.value = '';
   if (elements.demoCode) elements.demoCode.textContent = '';
@@ -116,16 +118,24 @@ function renderPendingConfirmation(data) {
 }
 
 async function requestBookingConfirmation(payload) {
-  return apiCall('/booking-confirmations/request', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
+  const phone = normalizeFirebasePhone(payload.clientPhone);
+  const result = await sendPhoneVerificationCode(phone);
+  if (!result.success) {
+    throw new Error(result.error || 'Could not send Firebase phone verification code');
+  }
+
+  return {
+    firebase_phone: true,
+    payload: { ...payload, clientPhone: phone },
+    client_phone: phone,
+    expiresInMinutes: 10,
+  };
 }
 
 async function confirmPendingBooking() {
   const pending = state.pendingConfirmation;
   const code = elements.confirmationCode?.value.trim();
-  if (!pending || !pending.confirmation_token) {
+  if (!pending) {
     showToast('Request a confirmation code first.');
     return;
   }
@@ -136,10 +146,21 @@ async function confirmPendingBooking() {
 
   if (elements.confirmBookingButton) elements.confirmBookingButton.disabled = true;
   try {
-    await apiCall('/booking-confirmations/confirm', {
-      method: 'POST',
-      body: JSON.stringify({ confirmationToken: pending.confirmation_token, code }),
-    });
+    if (pending.firebase_phone) {
+      const result = await verifyPhoneCode(code);
+      if (!result.success) {
+        throw new Error(result.error || 'Firebase phone verification failed');
+      }
+      await apiCall('/appointments', {
+        method: 'POST',
+        body: JSON.stringify(pending.payload),
+      });
+    } else {
+      await apiCall('/booking-confirmations/confirm', {
+        method: 'POST',
+        body: JSON.stringify({ confirmationToken: pending.confirmation_token, code }),
+      });
+    }
     showToast('Appointment confirmed.');
     resetPendingConfirmation();
     elements.bookingForm.reset();
@@ -168,6 +189,14 @@ function normalizeDuration(value) {
   const duration = parseInt(value, 10);
   if (!Number.isFinite(duration)) return 60;
   return Math.min(Math.max(duration, 5), 480);
+}
+
+function normalizeFirebasePhone(phone) {
+  const normalized = String(phone || '').replace(/[\s().-]/g, '');
+  if (!normalized.startsWith('+')) {
+    throw new Error('Enter your phone number with country code, for example +371XXXXXXXX.');
+  }
+  return normalized;
 }
 
 function formatDateForInput(date) {

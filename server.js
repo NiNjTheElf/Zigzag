@@ -22,6 +22,37 @@ app.use(express.json());
 app.use(express.static('./'));
 app.use('/uploads', express.static(uploadsDir));
 
+app.get('/api/health', async (req, res) => {
+  const configuredTables = ['users', 'appointments', 'day_offs', 'reviews', 'booking_confirmations', 'barber_available_times'];
+  try {
+    const dbNow = await pool.query('SELECT NOW() AS now');
+    const tables = await pool.query(
+      `SELECT table_name
+       FROM information_schema.tables
+       WHERE table_schema = 'public'
+         AND table_name = ANY($1)
+       ORDER BY table_name`,
+      [configuredTables]
+    );
+
+    res.json({
+      ok: true,
+      database: 'connected',
+      checkedAt: dbNow.rows[0].now,
+      tables: tables.rows.map(row => row.table_name),
+      storageConfigured: Boolean(SUPABASE_URL && SUPABASE_KEY),
+    });
+  } catch (error) {
+    console.error('Health check failed', error);
+    res.status(500).json({
+      ok: false,
+      database: 'error',
+      error: error.message,
+      code: error.code || null,
+    });
+  }
+});
+
 const storage = multer.memoryStorage();
 const upload = multer({ storage, limits: { fileSize: 8 * 1024 * 1024 } });
 

@@ -1,11 +1,23 @@
 {
   "hosting": {
     "site": "zigzag-hairplace-ae551",
-    "public": "public",
+    "public": ".",
     "ignore": [
       "firebase.json",
       "**/.*",
-      "**/node_modules/**"
+      "**/node_modules/**",
+      ".agents/**",
+      ".chrome-preview*/**",
+      ".edge-preview/**",
+      "functions/**",
+      "uploads/**",
+      "server.js",
+      "package.json",
+      "package-lock.json",
+      "database.sql",
+      "skills-lock.json",
+      "update_barbers.js",
+      "*.md"
     ],
     "rewrites": [
       {

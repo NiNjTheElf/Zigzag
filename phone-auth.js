@@ -2,7 +2,12 @@
 // Handles phone number verification for client bookings
 
 import { auth } from './firebase-config.js';
-import { RecaptchaVerifier, signInWithPhoneNumber } from 'firebase/auth';
+import {
+  PhoneAuthProvider,
+  RecaptchaVerifier,
+  signInWithCredential,
+  signInWithPhoneNumber,
+} from "https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js";
 
 let phoneVerificationId = null;
 let recaptchaVerifier = null;
@@ -61,17 +66,15 @@ export async function verifyPhoneCode(code) {
       throw new Error('No verification ID found. Send code first.');
     }
 
-    // Parse the code as a credential
-    const phoneCodeCredential = {
-      verificationId: phoneVerificationId,
-      verificationCode: code
-    };
+    const phoneCodeCredential = PhoneAuthProvider.credential(phoneVerificationId, code);
+    const userCredential = await signInWithCredential(auth, phoneCodeCredential);
 
-    console.log('Code verified:', code);
+    console.log('Phone code verified');
     return {
       success: true,
       message: 'Phone verified successfully',
-      credential: phoneCodeCredential
+      credential: phoneCodeCredential,
+      user: userCredential.user
     };
   } catch (error) {
     console.error('Error verifying code:', error);

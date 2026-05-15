@@ -34,9 +34,9 @@ The backend listens on `PORT` and exposes routes under `/api/*`.
 Set these values in your host service:
 
 ```env
-DATABASE_URL="postgresql://postgres.wshqkwuizjgeetmsfyzt:iPfQ425CO2lSxYQw@aws-1-eu-central-2.pooler.supabase.com:6543/postgres?pgbouncer=true"
-SUPABASE_URL="https://wshqkwuizjgeetmsfyzt.supabase.co"
-SUPABASE_KEY="sb_secret_jq3mZ1xE2y4alHkdg69kqQ_KjgAQOOO"
+DATABASE_URL="postgresql://postgres.<project-ref>:<db-password>@aws-1-eu-central-2.pooler.supabase.com:6543/postgres?pgbouncer=true"
+SUPABASE_URL="https://<project-ref>.supabase.co"
+SUPABASE_KEY="<supabase-service-role-or-secret-key>"
 SUPABASE_STORAGE_BUCKET="profilePhoto"
 JWT_SECRET="your_secure_secret_key_here_change_in_production"
 PORT=3000
