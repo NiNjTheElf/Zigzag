@@ -17,6 +17,14 @@ const elements = {
   bookingForm: document.getElementById('booking-form'),
   clientName: document.getElementById('client-name'),
   clientPhone: document.getElementById('client-phone'),
+  confirmationPanel: document.getElementById('booking-confirmation'),
+  confirmationMessage: document.getElementById('booking-confirmation-message'),
+  confirmationTimer: document.getElementById('booking-confirmation-timer'),
+  confirmationSummary: document.getElementById('booking-confirmation-summary'),
+  confirmationCode: document.getElementById('booking-confirmation-code'),
+  confirmBookingButton: document.getElementById('booking-confirm-button'),
+  cancelConfirmationButton: document.getElementById('booking-cancel-confirmation'),
+  demoCode: document.getElementById('booking-demo-code'),
   gallery: document.getElementById('barber-gallery'),
   toast: document.getElementById('booking-toast'),
 };
@@ -28,6 +36,7 @@ const state = {
   currentCalendarMonth: new Date(),
   todayDateKey: '',
   closedDateKeys: new Set(),
+  pendingConfirmation: null,
 };
 
 function showToast(message) {
@@ -62,6 +71,85 @@ async function apiCall(endpoint, options = {}) {
       ? 'Cannot reach the API. Run the server and open the page at http://localhost:3000/booking.html'
       : error.message;
     throw new Error(message);
+  }
+}
+
+function getSelectedBarberName() {
+  const barber = state.barbers.find(b => String(b.id) === String(elements.barberSelect.value));
+  return barber?.name || elements.barberSelect.selectedOptions[0]?.textContent || 'Selected barber';
+}
+
+function resetPendingConfirmation() {
+  state.pendingConfirmation = null;
+  if (elements.confirmationPanel) elements.confirmationPanel.classList.add('hidden');
+  if (elements.confirmationCode) elements.confirmationCode.value = '';
+  if (elements.demoCode) elements.demoCode.textContent = '';
+}
+
+function renderPendingConfirmation(data) {
+  state.pendingConfirmation = data;
+  const phone = data.client_phone || elements.clientPhone.value.trim();
+  const dateLabel = formatSelectedDateLabel(elements.bookingDate.value).replace('Selected date: ', '');
+
+  if (elements.confirmationMessage) {
+    elements.confirmationMessage.textContent = `We sent a 6-digit code to ${phone}.`;
+  }
+  if (elements.confirmationTimer) {
+    elements.confirmationTimer.textContent = `${data.expiresInMinutes || 10} min`;
+  }
+  if (elements.confirmationSummary) {
+    elements.confirmationSummary.innerHTML = '';
+    [getSelectedBarberName(), elements.bookingService.value, `${dateLabel} at ${elements.bookingTime.value}`]
+      .forEach(text => {
+        const item = document.createElement('span');
+        item.textContent = text;
+        elements.confirmationSummary.appendChild(item);
+      });
+  }
+  if (elements.demoCode) {
+    elements.demoCode.textContent = data.demoCode
+      ? `Demo code: ${data.demoCode}`
+      : 'Enter the SMS code to lock in this appointment.';
+  }
+  if (elements.confirmationPanel) elements.confirmationPanel.classList.remove('hidden');
+  elements.confirmationCode?.focus();
+}
+
+async function requestBookingConfirmation(payload) {
+  return apiCall('/booking-confirmations/request', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+async function confirmPendingBooking() {
+  const pending = state.pendingConfirmation;
+  const code = elements.confirmationCode?.value.trim();
+  if (!pending || !pending.confirmation_token) {
+    showToast('Request a confirmation code first.');
+    return;
+  }
+  if (!code || code.length < 6) {
+    showToast('Enter the 6-digit confirmation code.');
+    return;
+  }
+
+  if (elements.confirmBookingButton) elements.confirmBookingButton.disabled = true;
+  try {
+    await apiCall('/booking-confirmations/confirm', {
+      method: 'POST',
+      body: JSON.stringify({ confirmationToken: pending.confirmation_token, code }),
+    });
+    showToast('Appointment confirmed.');
+    resetPendingConfirmation();
+    elements.bookingForm.reset();
+    populateServiceSelect(elements.barberSelect.value);
+    setSelectedBookingDate(state.todayDateKey, { keepMonth: false, render: true, loadSlots: false });
+    renderAvailableSlots();
+  } catch (error) {
+    showToast('Confirmation failed: ' + error.message);
+  } finally {
+    if (elements.confirmBookingButton) elements.confirmBookingButton.disabled = false;
   }
 }
 
@@ -587,6 +675,7 @@ function populateServiceSelect(barberId) {
       ${service.photoUrl ? `<img src="${service.photoUrl}" alt="${service.name}" />` : '<span class="service-option-empty">No photo</span>'}
     `;
     card.addEventListener('click', () => {
+      resetPendingConfirmation();
       elements.bookingService.value = service.name;
       elements.bookingServiceOptions.querySelectorAll('.booking-service-option').forEach(btn => btn.classList.remove('selected'));
       card.classList.add('selected');
@@ -637,6 +726,7 @@ async function renderAvailableSlots() {
       button.type = 'button';
       button.textContent = time;
       button.addEventListener('click', () => {
+        resetPendingConfirmation();
         elements.bookingTime.value = time;
         document.querySelectorAll('#booking-slots button').forEach(btn => btn.classList.remove('selected'));
         button.classList.add('selected');
@@ -661,28 +751,32 @@ async function handleBookingSubmit(event) {
     return;
   }
   try {
-    await apiCall('/appointments', {
-      method: 'POST',
-      body: JSON.stringify({ barberId, date, time, clientName, clientPhone, serviceType: elements.bookingService.value, durationMinutes }),
+    const confirmation = await requestBookingConfirmation({
+      barberId,
+      date,
+      time,
+      clientName,
+      clientPhone,
+      serviceType: elements.bookingService.value,
+      durationMinutes,
     });
-    showToast('Appointment booked successfully.');
-    elements.bookingForm.reset();
-    populateServiceSelect(elements.barberSelect.value);
-    setSelectedBookingDate(state.todayDateKey, { keepMonth: false, render: true, loadSlots: false });
-    renderAvailableSlots();
+    renderPendingConfirmation(confirmation);
+    showToast('Confirmation code sent.');
   } catch (error) {
-    showToast('Booking failed: ' + error.message);
+    showToast('Could not send confirmation: ' + error.message);
   }
 }
 
 function bindEvents() {
   elements.barberSelect.addEventListener('change', async () => {
+    resetPendingConfirmation();
     setSelectedBarber(elements.barberSelect.value);
     await refreshCalendarDayOffMarkers();
     renderBarberGallery();
     renderAvailableSlots();
   });
   elements.bookingDate.addEventListener('change', () => {
+    resetPendingConfirmation();
     setSelectedBookingDate(elements.bookingDate.value, { keepMonth: false, render: true, loadSlots: true });
   });
   elements.bookingPrevMonth?.addEventListener('click', async () => {
@@ -702,10 +796,21 @@ function bindEvents() {
     await refreshCalendarDayOffMarkers();
   });
   elements.bookingService.addEventListener('change', () => {
+    resetPendingConfirmation();
     elements.bookingServiceOptions.querySelectorAll('.booking-service-option').forEach(button => {
       button.classList.toggle('selected', button.querySelector('.booking-service-text span')?.textContent === elements.bookingService.value);
     });
     renderAvailableSlots();
+  });
+  elements.clientName.addEventListener('input', resetPendingConfirmation);
+  elements.clientPhone.addEventListener('input', resetPendingConfirmation);
+  elements.confirmBookingButton?.addEventListener('click', confirmPendingBooking);
+  elements.cancelConfirmationButton?.addEventListener('click', resetPendingConfirmation);
+  elements.confirmationCode?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      confirmPendingBooking();
+    }
   });
   elements.bookingForm.addEventListener('submit', handleBookingSubmit);
 }

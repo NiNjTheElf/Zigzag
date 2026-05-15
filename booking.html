@@ -74,6 +74,27 @@
             </div>
             <button class="btn btn-primary" type="submit">Book Appointment</button>
             <p class="form-note">Slots update live.</p>
+            <div id="booking-confirmation" class="booking-confirmation hidden" aria-live="polite">
+              <div class="booking-confirmation-header">
+                <div>
+                  <h3>Confirm your booking</h3>
+                  <p id="booking-confirmation-message">Enter the code sent to your phone.</p>
+                </div>
+                <span id="booking-confirmation-timer">10 min</span>
+              </div>
+              <div id="booking-confirmation-summary" class="booking-confirmation-summary"></div>
+              <div class="form-row booking-code-row">
+                <div class="form-group half-width">
+                  <label for="booking-confirmation-code">SMS code</label>
+                  <input id="booking-confirmation-code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456" />
+                </div>
+                <button id="booking-confirm-button" class="btn btn-primary" type="button">Confirm Booking</button>
+              </div>
+              <div class="booking-confirmation-actions">
+                <button id="booking-cancel-confirmation" class="btn btn-secondary" type="button">Change details</button>
+                <p id="booking-demo-code" class="form-note"></p>
+              </div>
+            </div>
           </form>
         </div>
 

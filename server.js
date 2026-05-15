@@ -1,6 +1,7 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const multer = require('multer');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
@@ -46,9 +47,31 @@ pool.connect((err, client, release) => {
 const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret_key_change_in_production';
 const SLOT_TIMES = ['10:00 AM', '11:30 AM', '1:00 PM', '2:30 PM', '4:00 PM', '5:30 PM'];
 const DEFAULT_SERVICE_DURATION = 60;
+const BOOKING_CONFIRMATION_TTL_MINUTES = 10;
+const MAX_CONFIRMATION_ATTEMPTS = 5;
 
 async function ensureRuntimeSchema() {
   await pool.query('ALTER TABLE "appointments" ADD COLUMN IF NOT EXISTS "duration_minutes" INTEGER NOT NULL DEFAULT 60');
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "booking_confirmations" (
+      "id" SERIAL PRIMARY KEY,
+      "confirmation_token" TEXT UNIQUE NOT NULL,
+      "barber_id" INTEGER NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+      "client_name" TEXT NOT NULL,
+      "client_phone" TEXT NOT NULL,
+      "appointment_date" DATE NOT NULL,
+      "appointment_time" TEXT NOT NULL,
+      "service_type" TEXT NOT NULL DEFAULT 'Haircut',
+      "duration_minutes" INTEGER NOT NULL DEFAULT 60,
+      "code_hash" TEXT NOT NULL,
+      "status" TEXT NOT NULL DEFAULT 'pending',
+      "attempt_count" INTEGER NOT NULL DEFAULT 0,
+      "expires_at" TIMESTAMPTZ NOT NULL,
+      "confirmed_at" TIMESTAMPTZ,
+      "appointment_id" INTEGER REFERENCES "appointments"("id") ON DELETE SET NULL,
+      "created_at" TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "barber_available_times" (
       "id" SERIAL PRIMARY KEY,
@@ -62,6 +85,16 @@ async function ensureRuntimeSchema() {
   await pool.query('CREATE INDEX IF NOT EXISTS "appointments_barber_date_idx" ON "appointments" ("barber_id", "appointment_date")');
   await pool.query('CREATE INDEX IF NOT EXISTS "day_offs_barber_date_idx" ON "day_offs" ("barber_id", "day_off_date")');
   await pool.query('CREATE INDEX IF NOT EXISTS "barber_available_times_barber_sort_idx" ON "barber_available_times" ("barber_id", "sort_minutes")');
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS "booking_confirmations_pending_token_idx"
+    ON "booking_confirmations" ("confirmation_token")
+    WHERE "status" = 'pending'
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS "booking_confirmations_pending_phone_idx"
+    ON "booking_confirmations" ("client_phone", "created_at")
+    WHERE "status" = 'pending'
+  `);
 }
 
 ensureRuntimeSchema().catch(error => {
@@ -166,21 +199,21 @@ function getDurationFromServices(rawServices, serviceType, fallback = DEFAULT_SE
   return normalizeDuration(match?.durationMinutes || match?.duration || fallback);
 }
 
-async function getBarberServices(barberId) {
-  const result = await pool.query('SELECT "services" FROM "users" WHERE "id" = $1', [barberId]);
+async function getBarberServices(barberId, db = pool) {
+  const result = await db.query('SELECT "services" FROM "users" WHERE "id" = $1', [barberId]);
   return result.rows[0]?.services || '';
 }
 
-async function resolveAppointmentDuration(barberId, serviceType, requestedDuration) {
+async function resolveAppointmentDuration(barberId, serviceType, requestedDuration, db = pool) {
   if (requestedDuration !== undefined && requestedDuration !== null && requestedDuration !== '') {
     return normalizeDuration(requestedDuration);
   }
-  const services = await getBarberServices(barberId);
+  const services = await getBarberServices(barberId, db);
   return getDurationFromServices(services, serviceType);
 }
 
-async function getBarberAvailableTimes(barberId) {
-  const result = await pool.query(
+async function getBarberAvailableTimes(barberId, db = pool) {
+  const result = await db.query(
     'SELECT "id", "time_label", "sort_minutes" FROM "barber_available_times" WHERE "barber_id" = $1 ORDER BY "sort_minutes"',
     [barberId]
   );
@@ -192,15 +225,15 @@ async function getBarberAvailableTimes(barberId) {
   }));
 }
 
-async function getBookedIntervals(barberId, date, ignoreAppointmentId = null) {
+async function getBookedIntervals(barberId, date, ignoreAppointmentId = null, db = pool) {
   let query = 'SELECT "id", "appointment_time", "service_type", "duration_minutes" FROM "appointments" WHERE "barber_id" = $1 AND "appointment_date" = $2';
   const params = [barberId, date];
   if (ignoreAppointmentId) {
     query += ' AND "id" != $3';
     params.push(ignoreAppointmentId);
   }
-  const result = await pool.query(query, params);
-  const services = await getBarberServices(barberId);
+  const result = await db.query(query, params);
+  const services = await getBarberServices(barberId, db);
   return result.rows.map(row => {
     const start = parseTimeToMinutes(row.appointment_time);
     const duration = normalizeDuration(row.duration_minutes || getDurationFromServices(services, row.service_type));
@@ -208,14 +241,77 @@ async function getBookedIntervals(barberId, date, ignoreAppointmentId = null) {
   }).filter(Boolean);
 }
 
-async function isTimeAvailable(barberId, date, time, durationMinutes, ignoreAppointmentId = null) {
+async function isTimeAvailable(barberId, date, time, durationMinutes, ignoreAppointmentId = null, db = pool) {
   const start = parseTimeToMinutes(time);
   if (start === null) return false;
-  const slots = await getBarberAvailableTimes(barberId);
+  const slots = await getBarberAvailableTimes(barberId, db);
   const matchesSlot = slots.some(slot => slot.sort_minutes === start || slot.time_label === time);
   if (!matchesSlot) return false;
-  const bookedIntervals = await getBookedIntervals(barberId, date, ignoreAppointmentId);
+  const bookedIntervals = await getBookedIntervals(barberId, date, ignoreAppointmentId, db);
   return !bookedIntervals.some(interval => intervalsOverlap(start, start + durationMinutes, interval.start, interval.end));
+}
+
+function createConfirmationToken() {
+  return crypto.randomBytes(18).toString('hex');
+}
+
+function createVerificationCode() {
+  return String(crypto.randomInt(0, 1000000)).padStart(6, '0');
+}
+
+function hashVerificationCode(token, code) {
+  return crypto
+    .createHash('sha256')
+    .update(`${token}:${String(code || '').trim()}:${JWT_SECRET}`)
+    .digest('hex');
+}
+
+function normalizeClientPhone(phone) {
+  return String(phone || '').trim();
+}
+
+function hasUsablePhoneNumber(phone) {
+  return normalizeClientPhone(phone).replace(/\D/g, '').length >= 7;
+}
+
+function normalizeDateKey(value) {
+  if (value instanceof Date) {
+    const year = value.getFullYear();
+    const month = String(value.getMonth() + 1).padStart(2, '0');
+    const day = String(value.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+  const text = String(value || '').trim();
+  const match = text.match(/^(\d{4}-\d{2}-\d{2})/);
+  return match ? match[1] : text;
+}
+
+function getDateLockKey(dateKey) {
+  const compact = normalizeDateKey(dateKey).replace(/\D/g, '');
+  const parsed = parseInt(compact, 10);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+async function checkBookingAvailability(barberId, date, time, duration, db = pool) {
+  const dateKey = normalizeDateKey(date);
+  const dayOffResult = await db.query(
+    'SELECT "id" FROM "day_offs" WHERE "barber_id" = $1 AND ("day_off_date" = $2 OR ("is_recurring" = true AND "recurring_day_of_week" = $3))',
+    [barberId, dateKey, getDayOfWeekFromDateKey(dateKey)]
+  );
+
+  if (dayOffResult.rows.length > 0) {
+    return { available: false, error: 'Barber is off on this date' };
+  }
+
+  const available = await isTimeAvailable(barberId, dateKey, time, duration, null, db);
+  return available
+    ? { available: true }
+    : { available: false, error: 'Time slot is no longer available' };
+}
+
+async function sendBookingConfirmationCode(phone, code) {
+  console.log(`Booking confirmation code for ${phone}: ${code}`);
+  return { channel: 'demo_sms', message: 'Demo SMS generated. Connect an SMS provider to send this for real.' };
 }
 
 function getSafeUploadName(originalName) {
@@ -611,6 +707,162 @@ app.get('/api/appointments/available', async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to fetch available slots' });
+  }
+});
+
+app.post('/api/booking-confirmations/request', async (req, res) => {
+  const { barberId, date, time, clientName, clientPhone, serviceType, durationMinutes } = req.body;
+  const parsedBarberId = parseInt(barberId, 10);
+  const normalizedName = String(clientName || '').trim();
+  const normalizedPhone = normalizeClientPhone(clientPhone);
+
+  if (isNaN(parsedBarberId) || !date || !time || !normalizedName || !hasUsablePhoneNumber(normalizedPhone)) {
+    return res.status(400).json({ error: 'Missing booking details or phone number' });
+  }
+
+  try {
+    const duration = await resolveAppointmentDuration(parsedBarberId, serviceType, durationMinutes);
+    const availability = await checkBookingAvailability(parsedBarberId, date, time, duration);
+    if (!availability.available) {
+      return res.status(400).json({ error: availability.error });
+    }
+
+    const code = createVerificationCode();
+    const token = createConfirmationToken();
+    const codeHash = hashVerificationCode(token, code);
+    const delivery = await sendBookingConfirmationCode(normalizedPhone, code);
+
+    const result = await pool.query(
+      `INSERT INTO "booking_confirmations"
+        ("confirmation_token", "barber_id", "client_name", "client_phone", "appointment_date", "appointment_time", "service_type", "duration_minutes", "code_hash", "expires_at")
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW() + ($10 * interval '1 minute'))
+       RETURNING "confirmation_token", "barber_id", "client_name", "client_phone", "appointment_date", "appointment_time", "service_type", "duration_minutes", "expires_at"`,
+      [
+        token,
+        parsedBarberId,
+        normalizedName,
+        normalizedPhone,
+        date,
+        time,
+        serviceType || 'Haircut',
+        duration,
+        codeHash,
+        BOOKING_CONFIRMATION_TTL_MINUTES,
+      ]
+    );
+
+    res.status(201).json({
+      ...result.rows[0],
+      expiresInMinutes: BOOKING_CONFIRMATION_TTL_MINUTES,
+      delivery,
+      demoCode: code,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to prepare booking confirmation' });
+  }
+});
+
+app.post('/api/booking-confirmations/confirm', async (req, res) => {
+  const { confirmationToken, code } = req.body;
+  if (!confirmationToken || !code) {
+    return res.status(400).json({ error: 'Confirmation code is required' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const confirmationResult = await client.query(
+      `SELECT *
+       FROM "booking_confirmations"
+       WHERE "confirmation_token" = $1
+       FOR UPDATE`,
+      [confirmationToken]
+    );
+    const confirmation = confirmationResult.rows[0];
+
+    if (!confirmation || confirmation.status !== 'pending') {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Confirmation request was not found or already used' });
+    }
+
+    if (new Date(confirmation.expires_at).getTime() <= Date.now()) {
+      await client.query(
+        'UPDATE "booking_confirmations" SET "status" = $1 WHERE "id" = $2',
+        ['expired', confirmation.id]
+      );
+      await client.query('COMMIT');
+      return res.status(400).json({ error: 'Confirmation code expired. Request a new one.' });
+    }
+
+    if (confirmation.attempt_count >= MAX_CONFIRMATION_ATTEMPTS) {
+      await client.query(
+        'UPDATE "booking_confirmations" SET "status" = $1 WHERE "id" = $2',
+        ['failed', confirmation.id]
+      );
+      await client.query('COMMIT');
+      return res.status(400).json({ error: 'Too many incorrect attempts. Request a new code.' });
+    }
+
+    const codeHash = hashVerificationCode(confirmation.confirmation_token, code);
+    if (codeHash !== confirmation.code_hash) {
+      await client.query(
+        'UPDATE "booking_confirmations" SET "attempt_count" = "attempt_count" + 1 WHERE "id" = $1',
+        [confirmation.id]
+      );
+      await client.query('COMMIT');
+      return res.status(400).json({ error: 'Incorrect confirmation code' });
+    }
+
+    await client.query(
+      'SELECT pg_advisory_xact_lock($1, $2)',
+      [confirmation.barber_id, getDateLockKey(confirmation.appointment_date)]
+    );
+
+    const availability = await checkBookingAvailability(
+      confirmation.barber_id,
+      confirmation.appointment_date,
+      confirmation.appointment_time,
+      normalizeDuration(confirmation.duration_minutes),
+      client
+    );
+
+    if (!availability.available) {
+      await client.query(
+        'UPDATE "booking_confirmations" SET "status" = $1 WHERE "id" = $2',
+        ['failed', confirmation.id]
+      );
+      await client.query('COMMIT');
+      return res.status(400).json({ error: availability.error });
+    }
+
+    const appointmentResult = await client.query(
+      'INSERT INTO "appointments" ("barber_id", "client_name", "client_phone", "appointment_date", "appointment_time", "service_type", "duration_minutes") VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+      [
+        confirmation.barber_id,
+        confirmation.client_name,
+        confirmation.client_phone,
+        confirmation.appointment_date,
+        confirmation.appointment_time,
+        confirmation.service_type || 'Haircut',
+        normalizeDuration(confirmation.duration_minutes),
+      ]
+    );
+
+    await client.query(
+      'UPDATE "booking_confirmations" SET "status" = $1, "confirmed_at" = NOW(), "appointment_id" = $2 WHERE "id" = $3',
+      ['confirmed', appointmentResult.rows[0].id, confirmation.id]
+    );
+    await client.query('COMMIT');
+
+    res.status(201).json(appointmentResult.rows[0]);
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error(error);
+    res.status(500).json({ error: 'Failed to confirm booking' });
+  } finally {
+    client.release();
   }
 });
 

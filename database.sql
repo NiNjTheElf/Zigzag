@@ -36,7 +36,35 @@ ADD COLUMN IF NOT EXISTS "duration_minutes" INTEGER NOT NULL DEFAULT 60;
 CREATE INDEX IF NOT EXISTS "appointments_barber_date_idx"
 ON "appointments" ("barber_id", "appointment_date");
 
--- 4. Create the Day Offs table
+-- 4. Create pending booking confirmations for phone-code verification
+CREATE TABLE IF NOT EXISTS "booking_confirmations" (
+    "id" SERIAL PRIMARY KEY,
+    "confirmation_token" TEXT UNIQUE NOT NULL,
+    "barber_id" INTEGER NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+    "client_name" TEXT NOT NULL,
+    "client_phone" TEXT NOT NULL,
+    "appointment_date" DATE NOT NULL,
+    "appointment_time" TEXT NOT NULL,
+    "service_type" TEXT NOT NULL DEFAULT 'Haircut',
+    "duration_minutes" INTEGER NOT NULL DEFAULT 60,
+    "code_hash" TEXT NOT NULL,
+    "status" TEXT NOT NULL DEFAULT 'pending' CHECK ("status" IN ('pending', 'confirmed', 'expired', 'failed')),
+    "attempt_count" INTEGER NOT NULL DEFAULT 0,
+    "expires_at" TIMESTAMPTZ NOT NULL,
+    "confirmed_at" TIMESTAMPTZ,
+    "appointment_id" INTEGER REFERENCES "appointments"("id") ON DELETE SET NULL,
+    "created_at" TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS "booking_confirmations_pending_token_idx"
+ON "booking_confirmations" ("confirmation_token")
+WHERE "status" = 'pending';
+
+CREATE INDEX IF NOT EXISTS "booking_confirmations_pending_phone_idx"
+ON "booking_confirmations" ("client_phone", "created_at")
+WHERE "status" = 'pending';
+
+-- 5. Create the Day Offs table
 CREATE TABLE IF NOT EXISTS "day_offs" (
     "id" SERIAL PRIMARY KEY,
     "barber_id" INTEGER REFERENCES "users"("id") ON DELETE SET NULL,
@@ -50,7 +78,7 @@ CREATE TABLE IF NOT EXISTS "day_offs" (
 CREATE INDEX IF NOT EXISTS "day_offs_barber_date_idx"
 ON "day_offs" ("barber_id", "day_off_date");
 
--- 5. Create custom barber availability times
+-- 6. Create custom barber availability times
 CREATE TABLE IF NOT EXISTS "barber_available_times" (
     "id" SERIAL PRIMARY KEY,
     "barber_id" INTEGER NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
@@ -63,7 +91,7 @@ CREATE TABLE IF NOT EXISTS "barber_available_times" (
 CREATE INDEX IF NOT EXISTS "barber_available_times_barber_sort_idx"
 ON "barber_available_times" ("barber_id", "sort_minutes");
 
--- 6. Create the Reviews table
+-- 7. Create the Reviews table
 CREATE TABLE IF NOT EXISTS "reviews" (
     "id" SERIAL PRIMARY KEY,
     "barber_id" INTEGER NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
@@ -77,7 +105,7 @@ CREATE TABLE IF NOT EXISTS "reviews" (
     "created_at" TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 7. Insert default users
+-- 8. Insert default users
 INSERT INTO "users" ("name", "email", "password", "role") VALUES
   ('ZigZag Boss', 'boss@zigzag.com', '$2a$10$ZQIPoLW9k43OdCYADIN3L.FPO8eMClEevulVoSlG19QYDSqU9FLL.', 'BOSS'),
   ('Alex Mercer', 'alex@zigzag.com', '$2a$10$peowVLs8e7k42yYXuBtPwOFnWy.PYQotK5kzYQLJtB10UJQuzFP4m', 'BARBER'),
