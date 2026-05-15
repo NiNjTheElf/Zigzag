@@ -5,7 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ZigZag Hairplace - Booking</title>
   <link rel="stylesheet" href="styles.css" />
-  <script defer src="booking.js"></script>
+  <script>
+    // Replace this with your external backend origin when you deploy the API separately.
+    // Example: window.API_ORIGIN = 'https://api.yourdomain.com';
+    // window.API_ORIGIN = 'https://your-backend-url.example.com';
+  </script>
+  <!-- Firebase SDK -->
+  <script type="module" src="firebase-config.js"></script>
+  <script type="module" defer src="phone-auth.js"></script>
+  <script type="module" defer src="booking.js"></script>
 </head>
 <body>
   <div class="page-shell">
@@ -110,5 +118,7 @@
     </footer>
   </div>
   <div id="booking-toast" class="toast hidden"></div>
+  <!-- reCAPTCHA container for Firebase phone authentication -->
+  <div id="recaptcha-container"></div>
 </body>
 </html>

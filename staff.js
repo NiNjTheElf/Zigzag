@@ -1,4 +1,4 @@
-const API_BASE = (window.location.protocol === 'file:' ? 'http://localhost:3000' : window.location.origin) + '/api';
+import { API_BASE } from './api-config.js';
 const STORAGE_KEY_TOKEN = 'zigzagStaffToken';
 
 const state = {

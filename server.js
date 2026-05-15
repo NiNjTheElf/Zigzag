@@ -1383,9 +1383,12 @@ app.use((err, req, res, next) => {
 });
 
 // Simplified Start Logic
-const PORT = process.env.PORT || 3000;
+if (require.main === module) {
+  const PORT = process.env.PORT || 3000;
+  app.listen(PORT, () => {
+    console.log(`✨ ZigZag Hairplace server running on http://localhost:${PORT}`);
+    console.log('📦 Database: PostgreSQL (Connected via Pool)');
+  });
+}
 
-app.listen(PORT, () => {
-  console.log(`✨ ZigZag Hairplace server running on http://localhost:${PORT}`);
-  console.log('📦 Database: PostgreSQL (Connected via Pool)');
-});
+module.exports = { app };

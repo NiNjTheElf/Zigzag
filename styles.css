@@ -4229,3 +4229,20 @@ body::after {
     display: none;
   }
 }
+
+/* Remove decorative grid/diagonal overlays from images and promo banners */
+.hero-frame::before,
+.hero-frame::after,
+.hero-photo-frame::before,
+.hero-photo-frame::after,
+.studio-photo::after,
+.subpage-visual::after,
+.street-strip div::before,
+.booking-promo::before {
+  display: none;
+}
+
+.street-strip div,
+.booking-promo {
+  background: linear-gradient(180deg, #3a3a3a, #525252);
+}
