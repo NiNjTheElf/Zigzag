@@ -4,15 +4,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ZigZag Hairplace - Booking</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Russo+One&family=IBM+Plex+Sans+Condensed:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
   <script>
       window.API_ORIGIN = 'https://zigzag-production-d5c3.up.railway.app';
   </script>
   <!-- Firebase SDK -->
   <script type="module" src="firebase-config.js"></script>
+  <script type="module" defer src="phone-auth.js"></script>
   <script type="module" defer src="booking.js"></script>
 </head>
 <body>
@@ -80,8 +78,8 @@
                 <input id="client-phone" type="tel" placeholder="(555) 123-4567" required />
               </div>
             </div>
-            <button id="booking-submit-button" class="btn btn-primary" type="submit">Book Appointment</button>
-            <p class="form-note">Slots update live. SMS verification may apply; message rates can vary.</p>
+            <button class="btn btn-primary" type="submit">Book Appointment</button>
+            <p class="form-note">Slots update live.</p>
             <div id="booking-confirmation" class="booking-confirmation hidden" aria-live="polite">
               <div class="booking-confirmation-header">
                 <div>
