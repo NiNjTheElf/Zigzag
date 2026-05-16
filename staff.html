@@ -57,6 +57,7 @@
             <button class="tab-button" data-tab="profile">Profile</button>
             <button class="tab-button" data-tab="services">Services</button>
             <button class="tab-button" data-tab="availability">Times</button>
+            <button class="tab-button" data-tab="blocked">Blocked</button>
             <button class="tab-button boss-only hidden" data-tab="team">Team</button>
           </div>
 
@@ -209,6 +210,29 @@
             <div class="booking-card">
               <h3>Current staff</h3>
               <div id="staff-list" class="staff-list"></div>
+            </div>
+          </section>
+
+          <section id="blocked-tab" class="tab-panel hidden">
+            <div class="booking-card">
+              <h3>Blocked phone numbers</h3>
+              <form id="blocked-phone-form" class="booking-form">
+                <div class="form-row">
+                  <div class="form-group half-width">
+                    <label for="blocked-phone-number">Phone number</label>
+                    <input id="blocked-phone-number" type="tel" placeholder="+371XXXXXXXX" required />
+                  </div>
+                  <div class="form-group half-width">
+                    <label for="blocked-phone-reason">Reason</label>
+                    <input id="blocked-phone-reason" type="text" placeholder="Optional note" />
+                  </div>
+                </div>
+                <button class="btn btn-primary" type="submit">Block number</button>
+              </form>
+            </div>
+            <div class="booking-card">
+              <h3>Current blocks</h3>
+              <div id="blocked-phone-list"></div>
             </div>
           </section>
 

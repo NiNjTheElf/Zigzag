@@ -84,6 +84,7 @@ const RECAPTCHA_ENTERPRISE_SITE_KEY = process.env.RECAPTCHA_ENTERPRISE_SITE_KEY 
 const RECAPTCHA_ENTERPRISE_PROJECT_ID = process.env.RECAPTCHA_ENTERPRISE_PROJECT_ID || 'zigzag-hairplace';
 const RECAPTCHA_ENTERPRISE_API_KEY = process.env.RECAPTCHA_ENTERPRISE_API_KEY || '';
 const RECAPTCHA_ENTERPRISE_MIN_SCORE = Number.parseFloat(process.env.RECAPTCHA_ENTERPRISE_MIN_SCORE || '0.5');
+const FIREBASE_WEB_API_KEY = process.env.FIREBASE_WEB_API_KEY || process.env.FIREBASE_API_KEY || 'AIzaSyCYfXOI1gjrkYYxAS23mkIJSvrW7KXSAVI';
 
 async function ensureRuntimeSchema() {
   await pool.query('ALTER TABLE "appointments" ADD COLUMN IF NOT EXISTS "duration_minutes" INTEGER NOT NULL DEFAULT 60');
@@ -117,9 +118,29 @@ async function ensureRuntimeSchema() {
       UNIQUE ("barber_id", "sort_minutes")
     )
   `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "blocked_phone_numbers" (
+      "id" SERIAL PRIMARY KEY,
+      "barber_id" INTEGER NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+      "phone_number" TEXT NOT NULL,
+      "reason" TEXT,
+      "blocked_by" INTEGER REFERENCES "users"("id") ON DELETE SET NULL,
+      "is_active" BOOLEAN NOT NULL DEFAULT true,
+      "unblocked_at" TIMESTAMPTZ,
+      "unblocked_by" INTEGER REFERENCES "users"("id") ON DELETE SET NULL,
+      "created_at" TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
   await pool.query('CREATE INDEX IF NOT EXISTS "appointments_barber_date_idx" ON "appointments" ("barber_id", "appointment_date")');
+  await pool.query('CREATE INDEX IF NOT EXISTS "appointments_client_phone_idx" ON "appointments" ("client_phone")');
   await pool.query('CREATE INDEX IF NOT EXISTS "day_offs_barber_date_idx" ON "day_offs" ("barber_id", "day_off_date")');
   await pool.query('CREATE INDEX IF NOT EXISTS "barber_available_times_barber_sort_idx" ON "barber_available_times" ("barber_id", "sort_minutes")');
+  await pool.query('CREATE INDEX IF NOT EXISTS "blocked_phone_numbers_barber_active_idx" ON "blocked_phone_numbers" ("barber_id", "is_active", "phone_number")');
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS "blocked_phone_numbers_one_active_idx"
+    ON "blocked_phone_numbers" ("barber_id", "phone_number")
+    WHERE "is_active" = true
+  `);
   await pool.query(`
     CREATE INDEX IF NOT EXISTS "booking_confirmations_pending_token_idx"
     ON "booking_confirmations" ("confirmation_token")
@@ -309,6 +330,73 @@ function hasUsablePhoneNumber(phone) {
   return normalizeClientPhone(phone).replace(/\D/g, '').length >= 7;
 }
 
+function normalizePhoneForComparison(phone) {
+  return String(phone || '').replace(/[\s().-]/g, '').trim();
+}
+
+function isManagerRole(role) {
+  return role === 'BOSS' || role === 'SENIOR_BARBER';
+}
+
+async function lookupFirebasePhoneUser(idToken) {
+  if (!FIREBASE_WEB_API_KEY) {
+    throw new Error('Firebase API key is not configured');
+  }
+
+  const response = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${FIREBASE_WEB_API_KEY}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ idToken }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const message = data.error?.message || 'Firebase phone session is invalid';
+    throw new Error(message);
+  }
+
+  const user = data.users?.[0];
+  if (!user?.phoneNumber) {
+    throw new Error('Firebase account does not have a verified phone number');
+  }
+
+  return {
+    uid: user.localId,
+    phoneNumber: normalizePhoneForComparison(user.phoneNumber),
+  };
+}
+
+async function requireFirebasePhoneAuth(req, res, next) {
+  const authHeader = req.headers.authorization || '';
+  const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+  const idToken = bearerToken || req.body?.firebaseIdToken || req.get('x-firebase-id-token');
+
+  if (!idToken) {
+    return res.status(401).json({ error: 'Verified phone login is required' });
+  }
+
+  try {
+    req.firebasePhoneUser = await lookupFirebasePhoneUser(idToken);
+    if (req.body?.firebaseIdToken) {
+      delete req.body.firebaseIdToken;
+    }
+    next();
+  } catch (error) {
+    console.error('Firebase phone auth failed:', error);
+    res.status(401).json({ error: 'Phone login expired. Verify your phone again.' });
+  }
+}
+
+async function isPhoneBlockedForBarber(barberId, phoneNumber, db = pool) {
+  const result = await db.query(
+    `SELECT "id", "reason"
+     FROM "blocked_phone_numbers"
+     WHERE "barber_id" = $1 AND "phone_number" = $2 AND "is_active" = true
+     LIMIT 1`,
+    [barberId, normalizePhoneForComparison(phoneNumber)]
+  );
+  return result.rows[0] || null;
+}
+
 async function assessRecaptchaEnterpriseToken(token, expectedAction) {
   if (!RECAPTCHA_ENTERPRISE_API_KEY) {
     throw new Error('Server reCAPTCHA Enterprise API key is not configured');
@@ -426,6 +514,21 @@ async function checkBookingAvailability(barberId, date, time, duration, db = poo
     : { available: false, error: 'Time slot is no longer available' };
 }
 
+async function getClientAppointmentsForPhone(phoneNumber) {
+  const result = await pool.query(
+    `SELECT
+        a.*,
+        u."name" AS "barber_name"
+     FROM "appointments" a
+     LEFT JOIN "users" u ON u."id" = a."barber_id"
+     WHERE a."client_phone" = $1
+        OR regexp_replace(a."client_phone", '[\\s().-]', '', 'g') = $1
+     ORDER BY a."appointment_date" DESC, a."appointment_time" DESC`,
+    [normalizePhoneForComparison(phoneNumber)]
+  );
+  return result.rows.map(normalizeAppointmentRecord);
+}
+
 async function sendBookingConfirmationCode(phone, code) {
   console.log(`Booking confirmation code for ${phone}: ${code}`);
   return { channel: 'demo_sms', message: 'Demo SMS generated. Connect an SMS provider to send this for real.' };
@@ -477,7 +580,7 @@ const authenticateToken = (req, res, next) => {
 
 // ==================== AUTH ROUTES ====================
 
-app.post('/api/auth/login', requireRecaptchaEnterprise('LOGIN'), async (req, res) => {
+app.post('/api/auth/login', async (req, res) => {
   const { email, password } = req.body;
   try {
     // Correct SQL query
@@ -843,6 +946,10 @@ app.post('/api/booking-confirmations/request', async (req, res) => {
     if (!availability.available) {
       return res.status(400).json({ error: availability.error });
     }
+    const block = await isPhoneBlockedForBarber(parsedBarberId, normalizedPhone);
+    if (block) {
+      return res.status(403).json({ error: 'This phone number cannot book with the selected barber.' });
+    }
 
     const code = createVerificationCode();
     const token = createConfirmationToken();
@@ -953,6 +1060,15 @@ app.post('/api/booking-confirmations/confirm', async (req, res) => {
       await client.query('COMMIT');
       return res.status(400).json({ error: availability.error });
     }
+    const block = await isPhoneBlockedForBarber(confirmation.barber_id, confirmation.client_phone, client);
+    if (block) {
+      await client.query(
+        'UPDATE "booking_confirmations" SET "status" = $1 WHERE "id" = $2',
+        ['failed', confirmation.id]
+      );
+      await client.query('COMMIT');
+      return res.status(403).json({ error: 'This phone number cannot book with the selected barber.' });
+    }
 
     const appointmentResult = await client.query(
       'INSERT INTO "appointments" ("barber_id", "client_name", "client_phone", "appointment_date", "appointment_time", "service_type", "duration_minutes") VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
@@ -983,11 +1099,15 @@ app.post('/api/booking-confirmations/confirm', async (req, res) => {
   }
 });
 
-app.post('/api/appointments', requireRecaptchaEnterprise('BOOK_APPOINTMENT'), async (req, res) => {
+app.post('/api/appointments', requireRecaptchaEnterprise('BOOK_APPOINTMENT'), requireFirebasePhoneAuth, async (req, res) => {
   const { barberId, date, time, clientName, clientPhone, serviceType, durationMinutes } = req.body;
   const parsedBarberId = parseInt(barberId);
-  if (isNaN(parsedBarberId) || !date || !time || !clientName || !clientPhone) {
+  const normalizedClientPhone = normalizePhoneForComparison(clientPhone);
+  if (isNaN(parsedBarberId) || !date || !time || !clientName || !normalizedClientPhone) {
     return res.status(400).json({ error: 'Missing appointment details' });
+  }
+  if (normalizedClientPhone !== req.firebasePhoneUser.phoneNumber) {
+    return res.status(403).json({ error: 'Booking phone must match the verified phone login' });
   }
   try {
     const duration = await resolveAppointmentDuration(parsedBarberId, serviceType, durationMinutes);
@@ -999,6 +1119,10 @@ app.post('/api/appointments', requireRecaptchaEnterprise('BOOK_APPOINTMENT'), as
     if (checkDayOff.rows.length > 0) {
       return res.status(400).json({ error: 'Barber is off on this date' });
     }
+    const block = await isPhoneBlockedForBarber(parsedBarberId, normalizedClientPhone);
+    if (block) {
+      return res.status(403).json({ error: 'This phone number cannot book with the selected barber.' });
+    }
 
     const available = await isTimeAvailable(parsedBarberId, date, time, duration);
     if (!available) {
@@ -1007,7 +1131,7 @@ app.post('/api/appointments', requireRecaptchaEnterprise('BOOK_APPOINTMENT'), as
 
     const result = await pool.query(
       'INSERT INTO "appointments" ("barber_id", "client_name", "client_phone", "appointment_date", "appointment_time", "service_type", "duration_minutes") VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
-      [parsedBarberId, clientName, clientPhone, date, time, serviceType || 'Haircut', duration]
+      [parsedBarberId, clientName, normalizedClientPhone, date, time, serviceType || 'Haircut', duration]
     );
 
     console.log('Appointment booked:', result.rows[0]);
@@ -1019,6 +1143,16 @@ app.post('/api/appointments', requireRecaptchaEnterprise('BOOK_APPOINTMENT'), as
     }
     console.error(error);
     res.status(500).json({ error: 'Failed to create appointment' });
+  }
+});
+
+app.get('/api/client/appointments', requireFirebasePhoneAuth, async (req, res) => {
+  try {
+    const appointments = await getClientAppointmentsForPhone(req.firebasePhoneUser.phoneNumber);
+    res.json({ phoneNumber: req.firebasePhoneUser.phoneNumber, appointments });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to fetch client appointments' });
   }
 });
 
@@ -1175,6 +1309,107 @@ app.post('/api/upload', authenticateToken, upload.array('photos', 12), async (re
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: error.message || 'Upload failed' });
+  }
+});
+
+// ==================== BLOCKED PHONE ROUTES ====================
+
+app.get('/api/blocked-phones', authenticateToken, async (req, res) => {
+  try {
+    const isManager = isManagerRole(req.user.role);
+    const params = [];
+    let query = `
+      SELECT
+        b.*,
+        u."name" AS "barber_name",
+        blocker."name" AS "blocked_by_name",
+        unblocker."name" AS "unblocked_by_name"
+      FROM "blocked_phone_numbers" b
+      LEFT JOIN "users" u ON u."id" = b."barber_id"
+      LEFT JOIN "users" blocker ON blocker."id" = b."blocked_by"
+      LEFT JOIN "users" unblocker ON unblocker."id" = b."unblocked_by"
+      WHERE 1=1`;
+
+    if (!isManager) {
+      query += ' AND b."barber_id" = $1';
+      params.push(req.user.id);
+    } else if (req.query.barberId) {
+      query += ' AND b."barber_id" = $1';
+      params.push(parseInt(req.query.barberId, 10));
+    }
+
+    if (req.query.includeInactive !== 'true') {
+      query += ' AND b."is_active" = true';
+    }
+
+    query += ' ORDER BY b."is_active" DESC, b."created_at" DESC';
+    const result = await pool.query(query, params);
+    res.json(result.rows);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to fetch blocked phone numbers' });
+  }
+});
+
+app.post('/api/blocked-phones', authenticateToken, async (req, res) => {
+  const isManager = isManagerRole(req.user.role);
+  const barberId = isManager && req.body.barberId ? parseInt(req.body.barberId, 10) : req.user.id;
+  const phoneNumber = normalizePhoneForComparison(req.body.phoneNumber);
+  const reason = String(req.body.reason || '').trim() || null;
+
+  if (isNaN(barberId) || !phoneNumber || !hasUsablePhoneNumber(phoneNumber)) {
+    return res.status(400).json({ error: 'Barber and phone number are required' });
+  }
+
+  if (!isManager && barberId !== req.user.id) {
+    return res.status(403).json({ error: 'You can only block numbers for yourself' });
+  }
+
+  try {
+    const result = await pool.query(
+      `INSERT INTO "blocked_phone_numbers" ("barber_id", "phone_number", "reason", "blocked_by")
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT ("barber_id", "phone_number") WHERE "is_active" = true
+       DO UPDATE SET
+         "reason" = EXCLUDED."reason",
+         "blocked_by" = EXCLUDED."blocked_by"
+       RETURNING *`,
+      [barberId, phoneNumber, reason, req.user.id]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to block phone number' });
+  }
+});
+
+app.delete('/api/blocked-phones/:id', authenticateToken, async (req, res) => {
+  const blockId = parseInt(req.params.id, 10);
+  if (isNaN(blockId)) {
+    return res.status(400).json({ error: 'Invalid blocked phone record' });
+  }
+
+  try {
+    const existing = await pool.query('SELECT "barber_id" FROM "blocked_phone_numbers" WHERE "id" = $1', [blockId]);
+    if (!existing.rows.length) {
+      return res.status(404).json({ error: 'Blocked phone number not found' });
+    }
+
+    if (!isManagerRole(req.user.role) && existing.rows[0].barber_id !== req.user.id) {
+      return res.status(403).json({ error: 'You cannot unblock this phone number' });
+    }
+
+    const result = await pool.query(
+      `UPDATE "blocked_phone_numbers"
+       SET "is_active" = false, "unblocked_at" = NOW(), "unblocked_by" = $2
+       WHERE "id" = $1
+       RETURNING *`,
+      [blockId, req.user.id]
+    );
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to unblock phone number' });
   }
 });
 

@@ -4,6 +4,7 @@
 import { auth } from './firebase-config.js';
 import {
   deleteUser,
+  onAuthStateChanged,
   PhoneAuthProvider,
   RecaptchaVerifier,
   signInWithCredential,
@@ -175,6 +176,25 @@ export async function deleteVerifiedPhoneUser(phoneNumber) {
       error: error.message
     };
   }
+}
+
+export async function getCurrentPhoneIdToken() {
+  const user = auth.currentUser;
+  if (!user) return null;
+  return user.getIdToken();
+}
+
+export function getCurrentPhoneUser() {
+  return auth.currentUser;
+}
+
+export async function signOutPhoneUser() {
+  await signOut(auth);
+  resetPhoneVerification();
+}
+
+export function onPhoneAuthStateChanged(callback) {
+  return onAuthStateChanged(auth, callback);
 }
 
 /**

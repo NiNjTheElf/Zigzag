@@ -36,6 +36,9 @@ ADD COLUMN IF NOT EXISTS "duration_minutes" INTEGER NOT NULL DEFAULT 60;
 CREATE INDEX IF NOT EXISTS "appointments_barber_date_idx"
 ON "appointments" ("barber_id", "appointment_date");
 
+CREATE INDEX IF NOT EXISTS "appointments_client_phone_idx"
+ON "appointments" ("client_phone");
+
 -- 4. Create pending booking confirmations for phone-code verification
 CREATE TABLE IF NOT EXISTS "booking_confirmations" (
     "id" SERIAL PRIMARY KEY,
@@ -91,7 +94,27 @@ CREATE TABLE IF NOT EXISTS "barber_available_times" (
 CREATE INDEX IF NOT EXISTS "barber_available_times_barber_sort_idx"
 ON "barber_available_times" ("barber_id", "sort_minutes");
 
--- 7. Create the Reviews table
+-- 7. Create blocked phone numbers per barber
+CREATE TABLE IF NOT EXISTS "blocked_phone_numbers" (
+    "id" SERIAL PRIMARY KEY,
+    "barber_id" INTEGER NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+    "phone_number" TEXT NOT NULL,
+    "reason" TEXT,
+    "blocked_by" INTEGER REFERENCES "users"("id") ON DELETE SET NULL,
+    "is_active" BOOLEAN NOT NULL DEFAULT true,
+    "unblocked_at" TIMESTAMPTZ,
+    "unblocked_by" INTEGER REFERENCES "users"("id") ON DELETE SET NULL,
+    "created_at" TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS "blocked_phone_numbers_barber_active_idx"
+ON "blocked_phone_numbers" ("barber_id", "is_active", "phone_number");
+
+CREATE UNIQUE INDEX IF NOT EXISTS "blocked_phone_numbers_one_active_idx"
+ON "blocked_phone_numbers" ("barber_id", "phone_number")
+WHERE "is_active" = true;
+
+-- 8. Create the Reviews table
 CREATE TABLE IF NOT EXISTS "reviews" (
     "id" SERIAL PRIMARY KEY,
     "barber_id" INTEGER NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
@@ -105,7 +128,7 @@ CREATE TABLE IF NOT EXISTS "reviews" (
     "created_at" TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 8. Insert default users
+-- 9. Insert default users
 INSERT INTO "users" ("name", "email", "password", "role") VALUES
   ('ZigZag Boss', 'boss@zigzag.com', '$2a$10$ZQIPoLW9k43OdCYADIN3L.FPO8eMClEevulVoSlG19QYDSqU9FLL.', 'BOSS'),
   ('Alex Mercer', 'alex@zigzag.com', '$2a$10$peowVLs8e7k42yYXuBtPwOFnWy.PYQotK5kzYQLJtB10UJQuzFP4m', 'BARBER'),

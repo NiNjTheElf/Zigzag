@@ -4246,3 +4246,39 @@ body::after {
 .booking-promo {
   background: linear-gradient(180deg, #3a3a3a, #525252);
 }
+
+.client-portal-header,
+.client-login-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.client-login-form {
+  margin-top: 14px;
+}
+
+.client-appointment-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.client-appointment-item {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.client-appointment-item span {
+  color: rgba(255, 255, 255, 0.76);
+}
+
+.blocked-phone-item strong {
+  font-family: 'IBM Plex Sans Condensed', 'Segoe UI', sans-serif;
+}

@@ -1,5 +1,4 @@
 import { API_BASE } from './api-config.js';
-import { getRecaptchaEnterpriseToken } from './recaptcha-enterprise.js';
 const STORAGE_KEY_TOKEN = 'zigzagStaffToken';
 
 const state = {
@@ -10,6 +9,7 @@ const state = {
   dayOffs: [],
   serviceList: [],
   availabilityTimes: [],
+  blockedPhones: [],
   currentApptMonth: new Date(),
   currentDayoffMonth: new Date(),
   selectedApptDate: null,
@@ -52,6 +52,10 @@ const elements = {
   availabilityForm: document.getElementById('availability-form'),
   availabilityTime: document.getElementById('availability-time'),
   availabilityList: document.getElementById('availability-list'),
+  blockedPhoneForm: document.getElementById('blocked-phone-form'),
+  blockedPhoneNumber: document.getElementById('blocked-phone-number'),
+  blockedPhoneReason: document.getElementById('blocked-phone-reason'),
+  blockedPhoneList: document.getElementById('blocked-phone-list'),
   createBarberForm: document.getElementById('create-barber-form'),
   newBarberName: document.getElementById('new-barber-name'),
   newBarberEmail: document.getElementById('new-barber-email'),
@@ -330,6 +334,10 @@ function parseServiceList(rawServices) {
 function normalizeRole(role) {
   if (!role) return '';
   return String(role).trim().toUpperCase();
+}
+
+function normalizePhoneInput(phone) {
+  return String(phone || '').replace(/[\s().-]/g, '').trim();
 }
 
 function formatRoleLabel(role) {
@@ -615,10 +623,9 @@ function dateToDateKey(date) {
 }
 
 async function login(email, password) {
-  const recaptchaToken = await getRecaptchaEnterpriseToken('LOGIN');
   const data = await apiCall('/auth/login', {
     method: 'POST',
-    body: JSON.stringify({ email, password, recaptchaToken }),
+    body: JSON.stringify({ email, password }),
   });
   saveSession(data.token, data.user);
   return data.user;
@@ -653,6 +660,12 @@ async function fetchAvailability() {
   const data = await apiCall('/availability/me', { method: 'GET' });
   state.availabilityTimes = data || [];
   return state.availabilityTimes;
+}
+
+async function fetchBlockedPhones() {
+  const data = await apiCall('/blocked-phones', { method: 'GET' });
+  state.blockedPhones = data || [];
+  return state.blockedPhones;
 }
 
 async function fetchDayOffs() {
@@ -849,6 +862,7 @@ function showDayAppointments(dateKey, appointments) {
         ${state.user && state.user.role === 'BOSS' ? `<p><strong>Barber:</strong> ${barberLabel}</p>` : ''}
         <div class="dayoff-item-actions">
           <button class="btn btn-small open-reschedule" data-id="${appt.id}">Reschedule</button>
+          <button class="btn btn-secondary btn-small block-appointment-phone" data-id="${appt.id}">Block phone</button>
           <button class="btn btn-small cancel-appointment" data-id="${appt.id}">Cancel</button>
         </div>
       </div>
@@ -1076,7 +1090,7 @@ function selectDayOffDate(date) {
   if (elements.dayoffDate) {
     elements.dayoffDate.value = dateKey;
   }
-  renderDayOffCalendar();
+  renderDayOffsCalendar();
   
   const appointmentsOnDate = state.appointments.filter(appt => normalizeDateKey(appt.appointment_date) === dateKey);
   if (appointmentsOnDate.length > 0) {
@@ -1149,6 +1163,70 @@ function renderAvailabilityTimes() {
         await refreshAvailability();
       } catch (error) {
         showToast('Could not delete time: ' + error.message);
+      }
+    });
+  });
+}
+
+function renderBlockedPhones() {
+  if (!elements.blockedPhoneList) return;
+  elements.blockedPhoneList.innerHTML = '';
+
+  if (!state.blockedPhones.length) {
+    elements.blockedPhoneList.innerHTML = '<p>No blocked phone numbers.</p>';
+    return;
+  }
+
+  state.blockedPhones.forEach(block => {
+    const item = document.createElement('div');
+    item.className = 'dayoff-item blocked-phone-item';
+    const barberLabel = block.barber_name ? `<p><strong>Barber:</strong> ${block.barber_name}</p>` : '';
+    item.innerHTML = `
+      <div class="dayoff-item-info">
+        <strong>${block.phone_number}</strong>
+        ${barberLabel}
+        <p>${block.reason || 'No reason provided'}</p>
+      </div>
+      <button class="dayoff-item-delete unblock-phone" type="button" data-id="${block.id}">Unblock</button>
+    `;
+    elements.blockedPhoneList.appendChild(item);
+  });
+
+  elements.blockedPhoneList.querySelectorAll('.unblock-phone').forEach(button => {
+    button.addEventListener('click', async () => {
+      if (!confirm('Unblock this phone number?')) return;
+      try {
+        await apiCall(`/blocked-phones/${button.dataset.id}`, { method: 'DELETE' });
+        showToast('Phone number unblocked.');
+        await refreshBlockedPhones();
+      } catch (error) {
+        showToast('Could not unblock number: ' + error.message);
+      }
+    });
+  });
+
+  document.querySelectorAll('.block-appointment-phone').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const apptId = parseInt(e.target.dataset.id, 10);
+      const appointment = state.appointments.find(appt => appt.id === apptId);
+      if (!appointment) {
+        showToast('Appointment not found.');
+        return;
+      }
+      if (!confirm(`Block ${appointment.client_phone} from booking with this barber?`)) return;
+      try {
+        await apiCall('/blocked-phones', {
+          method: 'POST',
+          body: JSON.stringify({
+            barberId: appointment.barber_id,
+            phoneNumber: appointment.client_phone,
+            reason: `Blocked from appointment on ${normalizeDateKey(appointment.appointment_date)}`,
+          }),
+        });
+        showToast('Phone number blocked.');
+        await refreshBlockedPhones();
+      } catch (error) {
+        showToast('Could not block phone: ' + error.message);
       }
     });
   });
@@ -1306,6 +1384,28 @@ async function handleAvailabilitySubmit(event) {
   }
 }
 
+async function handleBlockedPhoneSubmit(event) {
+  event.preventDefault();
+  const phoneNumber = normalizePhoneInput(elements.blockedPhoneNumber.value);
+  const reason = elements.blockedPhoneReason.value.trim();
+  if (!phoneNumber || phoneNumber.replace(/\D/g, '').length < 7) {
+    showToast('Enter a valid phone number.');
+    return;
+  }
+
+  try {
+    await apiCall('/blocked-phones', {
+      method: 'POST',
+      body: JSON.stringify({ phoneNumber, reason }),
+    });
+    elements.blockedPhoneForm.reset();
+    showToast('Phone number blocked.');
+    await refreshBlockedPhones();
+  } catch (error) {
+    showToast('Could not block number: ' + error.message);
+  }
+}
+
 async function refreshBarbers() {
   await fetchBarbers();
   renderStaffList();
@@ -1331,6 +1431,11 @@ async function refreshAvailability() {
   renderAvailabilityTimes();
 }
 
+async function refreshBlockedPhones() {
+  await fetchBlockedPhones();
+  renderBlockedPhones();
+}
+
 async function refreshAll() {
   if (state.token) {
     await fetchCurrentUser();
@@ -1351,7 +1456,7 @@ async function refreshAll() {
   dayoffTab?.classList.remove('hidden');
   renderTab('appointments');
 
-  await Promise.all([refreshBarbers(), refreshDayOffs(), refreshAvailability()]);
+  await Promise.all([refreshBarbers(), refreshDayOffs(), refreshAvailability(), refreshBlockedPhones()]);
   await refreshAppointments();
   renderProfileForm();
 }
@@ -1385,6 +1490,7 @@ async function init() {
   elements.profileForm.addEventListener('submit', handleSaveProfile);
   elements.serviceForm.addEventListener('submit', addOrUpdateService);
   elements.availabilityForm.addEventListener('submit', handleAvailabilitySubmit);
+  elements.blockedPhoneForm?.addEventListener('submit', handleBlockedPhoneSubmit);
   elements.profilePhotoFile.addEventListener('change', renderProfilePhotoFilePreview);
   elements.workPhotoFiles.addEventListener('change', renderWorkPhotoFilePreview);
   elements.servicePhotoFile.addEventListener('change', renderServicePhotoFilePreview);
