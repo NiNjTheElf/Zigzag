@@ -89,6 +89,41 @@ let state = {
   autoRefreshInterval: null,
 };
 
+function runWhenIdle(callback) {
+  if ('requestIdleCallback' in window) {
+    window.requestIdleCallback(callback, { timeout: 1600 });
+  } else {
+    setTimeout(callback, 250);
+  }
+}
+
+function lazyLoadStudioCollage() {
+  const tiles = document.querySelectorAll('.cube-tile[data-bg]');
+  if (!tiles.length) return;
+
+  const loadTiles = () => {
+    tiles.forEach(tile => {
+      tile.style.backgroundImage = tile.dataset.bg;
+      tile.removeAttribute('data-bg');
+    });
+  };
+
+  if (!('IntersectionObserver' in window)) {
+    runWhenIdle(loadTiles);
+    return;
+  }
+
+  const observer = new IntersectionObserver((entries) => {
+    if (entries.some(entry => entry.isIntersecting)) {
+      loadTiles();
+      observer.disconnect();
+    }
+  }, { rootMargin: '420px 0px' });
+
+  const collage = document.querySelector('.cube-collage');
+  if (collage) observer.observe(collage);
+}
+
 
 // ==================== UTILITIES ====================
 
@@ -452,6 +487,8 @@ function renderBarberProfiles() {
       const img = document.createElement('img');
       img.src = profilePhoto;
       img.alt = `${barber.name} profile`;
+      img.loading = 'lazy';
+      img.decoding = 'async';
       imageGrid.appendChild(img);
     } else {
       const placeholder = document.createElement('div');
@@ -476,7 +513,7 @@ function renderBarberProfiles() {
     reviews.innerHTML = `
       <div class="review-stars">Loading reviews...</div>
     `;
-    loadBarberReviewSummary(barber, reviews);
+    runWhenIdle(() => loadBarberReviewSummary(barber, reviews));
     
     const socials = document.createElement('div');
     socials.className = 'barber-social-links';
@@ -1185,6 +1222,12 @@ function initCalendarNav() {
 
 async function init() {
   // Restore token if exists
+  lazyLoadStudioCollage();
+
+  if (elements.barberProfiles) {
+    elements.barberProfiles.innerHTML = '<div class="barber-card-skeleton loading-skeleton"></div><div class="barber-card-skeleton loading-skeleton"></div><div class="barber-card-skeleton loading-skeleton"></div>';
+  }
+
   const storedToken = localStorage.getItem(STORAGE_KEY_TOKEN);
   const storedUser = localStorage.getItem('zigzagCurrentUser');
   if (storedToken) {
@@ -1292,8 +1335,12 @@ async function init() {
   initTabs();
   initCalendarNav();
 
-  // Load barbers on initial page load
-  await populateBarberSelects();
+  // Load data after first paint so static content renders immediately.
+  requestAnimationFrame(() => {
+    populateBarberSelects().catch(error => {
+      console.error('Failed to load barbers:', error);
+    });
+  });
 }
 
 init().catch(error => {

@@ -50,6 +50,27 @@ const state = {
   isConfirmingBooking: false,
 };
 
+function runWhenIdle(callback) {
+  if ('requestIdleCallback' in window) {
+    window.requestIdleCallback(callback, { timeout: 1600 });
+  } else {
+    setTimeout(callback, 250);
+  }
+}
+
+function renderLoadingState() {
+  if (elements.barberGrid) {
+    elements.barberGrid.innerHTML = '<div class="barber-card-skeleton loading-skeleton"></div><div class="barber-card-skeleton loading-skeleton"></div><div class="barber-card-skeleton loading-skeleton"></div>';
+  }
+  if (elements.bookingSlots) {
+    elements.bookingSlots.innerHTML = '<div class="slot-message loading-skeleton">Loading available times...</div>';
+  }
+  if (elements.barberSelect) {
+    elements.barberSelect.innerHTML = '<option>Loading barbers...</option>';
+    elements.barberSelect.disabled = true;
+  }
+}
+
 function showToast(message) {
   if (!elements.toast) return;
   elements.toast.textContent = message;
@@ -462,6 +483,8 @@ function renderBarberCards() {
       const img = document.createElement('img');
       img.src = profilePhoto;
       img.alt = barber.name;
+      img.loading = 'lazy';
+      img.decoding = 'async';
       imageContainer.appendChild(img);
     } else {
       const placeholder = document.createElement('div');
@@ -502,8 +525,7 @@ function renderBarberCards() {
     
     elements.barberGrid.appendChild(card);
     
-    // Load and display rating
-    loadAndDisplayRating(barber.id);
+    runWhenIdle(() => loadAndDisplayRating(barber.id));
   });
 }
 
@@ -720,6 +742,7 @@ function parseBarberServices(rawServices) {
 
 function fillBarberSelect() {
   elements.barberSelect.innerHTML = '';
+  elements.barberSelect.disabled = false;
   state.barbers.forEach(barber => {
     const option = document.createElement('option');
     option.value = barber.id;
@@ -762,7 +785,7 @@ function populateServiceSelect(barberId) {
         <span>${service.name}</span>
         <small>${durationMinutes} min</small>
       </span>
-      ${service.photoUrl ? `<img src="${service.photoUrl}" alt="${service.name}" />` : '<span class="service-option-empty">No photo</span>'}
+      ${service.photoUrl ? `<img src="${service.photoUrl}" alt="${service.name}" loading="lazy" decoding="async" />` : '<span class="service-option-empty">No photo</span>'}
     `;
     card.addEventListener('click', () => {
       resetPendingConfirmation();
@@ -936,11 +959,24 @@ async function init() {
   }
   setSelectedBookingDate(state.todayDateKey, { keepMonth: false, render: true, loadSlots: false });
   bindEvents();
-  await fetchBarbers();
-  renderBarberCards();
-  fillBarberSelect();
-  await refreshCalendarDayOffMarkers();
-  renderAvailableSlots();
+  renderLoadingState();
+
+  try {
+    await fetchBarbers();
+    renderBarberCards();
+    fillBarberSelect();
+    await refreshCalendarDayOffMarkers();
+    renderAvailableSlots();
+  } catch (error) {
+    console.error('Booking page data failed:', error);
+    if (elements.barberGrid) {
+      elements.barberGrid.innerHTML = '<p class="form-note">Could not load barbers. Refresh the page in a moment.</p>';
+    }
+    if (elements.bookingSlots) {
+      elements.bookingSlots.innerHTML = '<div class="slot-message">Could not load booking data.</div>';
+    }
+    showToast('Could not load booking data: ' + error.message);
+  }
 }
 
 init().catch(error => {

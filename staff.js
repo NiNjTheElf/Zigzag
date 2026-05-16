@@ -74,6 +74,24 @@ const elements = {
   tabButtons: document.querySelectorAll('.tab-button'),
 };
 
+function renderDashboardLoadingState() {
+  if (elements.appointmentsCalendar) {
+    elements.appointmentsCalendar.innerHTML = '<div class="barber-card-skeleton loading-skeleton"></div><div class="barber-card-skeleton loading-skeleton"></div><div class="barber-card-skeleton loading-skeleton"></div>';
+  }
+  if (elements.dayAppointmentsList) {
+    elements.dayAppointmentsList.innerHTML = '<p class="form-note">Loading appointments...</p>';
+  }
+  if (elements.dayoffsList) {
+    elements.dayoffsList.innerHTML = '<p class="form-note">Loading day offs...</p>';
+  }
+  if (elements.availabilityList) {
+    elements.availabilityList.innerHTML = '<p class="form-note">Loading times...</p>';
+  }
+  if (elements.blockedPhoneList) {
+    elements.blockedPhoneList.innerHTML = '<p class="form-note">Loading blocked numbers...</p>';
+  }
+}
+
 function showToast(message) {
   if (!elements.toast) return;
   elements.toast.textContent = message;
@@ -1455,9 +1473,20 @@ async function refreshAll() {
   appointmentTab?.classList.remove('hidden');
   dayoffTab?.classList.remove('hidden');
   renderTab('appointments');
+  renderDashboardLoadingState();
 
-  await Promise.all([refreshBarbers(), refreshDayOffs(), refreshAvailability(), refreshBlockedPhones()]);
-  await refreshAppointments();
+  const results = await Promise.allSettled([
+    refreshBarbers(),
+    refreshDayOffs(),
+    refreshAvailability(),
+    refreshBlockedPhones(),
+    refreshAppointments(),
+  ]);
+  const failed = results.find(result => result.status === 'rejected');
+  if (failed) {
+    console.warn('Some dashboard data failed to load:', failed.reason);
+    showToast('Some dashboard data is still loading or unavailable.');
+  }
   renderProfileForm();
 }
 
@@ -1481,7 +1510,8 @@ async function init() {
     elements.dashboardTitle.textContent = `Hello, ${state.user.name}`;
     try {
       await refreshAll();
-    } catch {
+    } catch (error) {
+      console.error('Stored staff session failed:', error);
       logout();
     }
   }
