@@ -1,6 +1,13 @@
 import { API_BASE } from './api-config.js';
-import { resetPhoneVerification, sendPhoneVerificationCode, verifyPhoneCode } from './phone-auth.js';
+import {
+  deleteVerifiedPhoneUser,
+  resetPhoneVerification,
+  sendPhoneVerificationCode,
+  verifyPhoneCode,
+} from './phone-auth.js';
+import { getRecaptchaEnterpriseToken } from './recaptcha-enterprise.js';
 const SLOT_TIMES = ['10:00 AM', '11:30 AM', '1:00 PM', '2:30 PM', '4:00 PM', '5:30 PM'];
+const PHONE_VERIFICATION_TTL_MS = 10 * 60 * 1000;
 
 const elements = {
   barberGrid: document.getElementById('booking-barber-grid'),
@@ -18,6 +25,7 @@ const elements = {
   bookingForm: document.getElementById('booking-form'),
   clientName: document.getElementById('client-name'),
   clientPhone: document.getElementById('client-phone'),
+  bookingSubmitButton: document.getElementById('booking-submit-button'),
   confirmationPanel: document.getElementById('booking-confirmation'),
   confirmationMessage: document.getElementById('booking-confirmation-message'),
   confirmationTimer: document.getElementById('booking-confirmation-timer'),
@@ -38,6 +46,8 @@ const state = {
   todayDateKey: '',
   closedDateKeys: new Set(),
   pendingConfirmation: null,
+  isRequestingConfirmation: false,
+  isConfirmingBooking: false,
 };
 
 function showToast(message) {
@@ -86,6 +96,40 @@ function resetPendingConfirmation() {
   if (elements.confirmationPanel) elements.confirmationPanel.classList.add('hidden');
   if (elements.confirmationCode) elements.confirmationCode.value = '';
   if (elements.demoCode) elements.demoCode.textContent = '';
+  syncBookingSubmitButton();
+}
+
+function syncBookingSubmitButton() {
+  if (!elements.bookingSubmitButton) return;
+  const hasPendingCode = hasActivePendingConfirmation();
+  elements.bookingSubmitButton.disabled = state.isRequestingConfirmation || hasPendingCode;
+  elements.bookingSubmitButton.textContent = state.isRequestingConfirmation
+    ? 'Sending Code...'
+    : (hasPendingCode ? 'Code Sent' : 'Book Appointment');
+}
+
+function hasActivePendingConfirmation() {
+  const pending = state.pendingConfirmation;
+  return Boolean(pending && (!pending.expiresAt || pending.expiresAt > Date.now()));
+}
+
+function createConfirmationFingerprint(payload) {
+  return [
+    payload.barberId,
+    payload.date,
+    payload.time,
+    payload.clientName,
+    payload.clientPhone,
+    payload.serviceType,
+    payload.durationMinutes,
+  ].map(value => String(value || '').trim()).join('|');
+}
+
+function isPendingConfirmationReusable(payload) {
+  const pending = state.pendingConfirmation;
+  if (!pending?.firebase_phone) return false;
+  if (!hasActivePendingConfirmation()) return false;
+  return pending.fingerprint === createConfirmationFingerprint(payload);
 }
 
 function renderPendingConfirmation(data) {
@@ -114,11 +158,13 @@ function renderPendingConfirmation(data) {
       : 'Enter the SMS code to lock in this appointment.';
   }
   if (elements.confirmationPanel) elements.confirmationPanel.classList.remove('hidden');
+  syncBookingSubmitButton();
   elements.confirmationCode?.focus();
 }
 
 async function requestBookingConfirmation(payload) {
   const phone = normalizeFirebasePhone(payload.clientPhone);
+  const normalizedPayload = { ...payload, clientPhone: phone };
   const result = await sendPhoneVerificationCode(phone);
   if (!result.success) {
     throw new Error(result.error || 'Could not send Firebase phone verification code');
@@ -126,13 +172,17 @@ async function requestBookingConfirmation(payload) {
 
   return {
     firebase_phone: true,
-    payload: { ...payload, clientPhone: phone },
+    payload: normalizedPayload,
     client_phone: phone,
+    fingerprint: createConfirmationFingerprint(normalizedPayload),
     expiresInMinutes: 10,
+    expiresAt: Date.now() + PHONE_VERIFICATION_TTL_MS,
+    reused: Boolean(result.reused),
   };
 }
 
 async function confirmPendingBooking() {
+  if (state.isConfirmingBooking) return;
   const pending = state.pendingConfirmation;
   const code = elements.confirmationCode?.value.trim();
   if (!pending) {
@@ -143,17 +193,26 @@ async function confirmPendingBooking() {
     showToast('Enter the 6-digit confirmation code.');
     return;
   }
+  if (!hasActivePendingConfirmation()) {
+    resetPendingConfirmation();
+    showToast('Confirmation code expired. Request a new one.');
+    return;
+  }
 
+  state.isConfirmingBooking = true;
   if (elements.confirmBookingButton) elements.confirmBookingButton.disabled = true;
+  let verifiedPhone = null;
   try {
     if (pending.firebase_phone) {
       const result = await verifyPhoneCode(code);
       if (!result.success) {
         throw new Error(result.error || 'Firebase phone verification failed');
       }
+      verifiedPhone = pending.client_phone;
+      const recaptchaToken = await getRecaptchaEnterpriseToken('BOOK_APPOINTMENT');
       await apiCall('/appointments', {
         method: 'POST',
-        body: JSON.stringify(pending.payload),
+        body: JSON.stringify({ ...pending.payload, recaptchaToken }),
       });
     } else {
       await apiCall('/booking-confirmations/confirm', {
@@ -162,14 +221,29 @@ async function confirmPendingBooking() {
       });
     }
     showToast('Appointment confirmed.');
+    if (verifiedPhone) {
+      const cleanup = await deleteVerifiedPhoneUser(verifiedPhone);
+      if (!cleanup.success) {
+        console.warn('Firebase phone user cleanup failed:', cleanup.error);
+      }
+      verifiedPhone = null;
+    }
     resetPendingConfirmation();
     elements.bookingForm.reset();
     populateServiceSelect(elements.barberSelect.value);
     setSelectedBookingDate(state.todayDateKey, { keepMonth: false, render: true, loadSlots: false });
     renderAvailableSlots();
   } catch (error) {
+    if (verifiedPhone) {
+      const cleanup = await deleteVerifiedPhoneUser(verifiedPhone);
+      if (!cleanup.success) {
+        console.warn('Firebase phone user cleanup failed:', cleanup.error);
+      }
+      resetPendingConfirmation();
+    }
     showToast('Confirmation failed: ' + error.message);
   } finally {
+    state.isConfirmingBooking = false;
     if (elements.confirmBookingButton) elements.confirmBookingButton.disabled = false;
   }
 }
@@ -547,6 +621,7 @@ function openReviewsModal(barber) {
     }
     
     try {
+      const recaptchaToken = await getRecaptchaEnterpriseToken('SUBMIT_REVIEW');
       await apiCall('/reviews', {
         method: 'POST',
         body: JSON.stringify({
@@ -555,6 +630,7 @@ function openReviewsModal(barber) {
           clientPhone: phone,
           rating,
           comment: comment || null,
+          recaptchaToken,
         }),
       });
       showToast('Thank you for your review!');
@@ -769,6 +845,7 @@ async function renderAvailableSlots() {
 
 async function handleBookingSubmit(event) {
   event.preventDefault();
+  if (state.isRequestingConfirmation) return;
   const barberId = elements.barberSelect.value;
   const date = elements.bookingDate.value;
   const time = elements.bookingTime.value;
@@ -779,20 +856,41 @@ async function handleBookingSubmit(event) {
     showToast('Complete all booking fields.');
     return;
   }
+  let normalizedPhone;
   try {
-    const confirmation = await requestBookingConfirmation({
-      barberId,
-      date,
-      time,
-      clientName,
-      clientPhone,
-      serviceType: elements.bookingService.value,
-      durationMinutes,
-    });
+    normalizedPhone = normalizeFirebasePhone(clientPhone);
+  } catch (error) {
+    showToast(error.message);
+    return;
+  }
+
+  const payload = {
+    barberId,
+    date,
+    time,
+    clientName,
+    clientPhone: normalizedPhone,
+    serviceType: elements.bookingService.value,
+    durationMinutes,
+  };
+
+  if (isPendingConfirmationReusable(payload)) {
+    renderPendingConfirmation(state.pendingConfirmation);
+    showToast('A confirmation code is already active for this booking.');
+    return;
+  }
+
+  state.isRequestingConfirmation = true;
+  syncBookingSubmitButton();
+  try {
+    const confirmation = await requestBookingConfirmation(payload);
     renderPendingConfirmation(confirmation);
-    showToast('Confirmation code sent.');
+    showToast(confirmation.reused ? 'Use the code already sent to your phone.' : 'Confirmation code sent.');
   } catch (error) {
     showToast('Could not send confirmation: ' + error.message);
+  } finally {
+    state.isRequestingConfirmation = false;
+    syncBookingSubmitButton();
   }
 }
 

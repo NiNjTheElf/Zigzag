@@ -80,6 +80,10 @@ const SLOT_TIMES = ['10:00 AM', '11:30 AM', '1:00 PM', '2:30 PM', '4:00 PM', '5:
 const DEFAULT_SERVICE_DURATION = 60;
 const BOOKING_CONFIRMATION_TTL_MINUTES = 10;
 const MAX_CONFIRMATION_ATTEMPTS = 5;
+const RECAPTCHA_ENTERPRISE_SITE_KEY = process.env.RECAPTCHA_ENTERPRISE_SITE_KEY || '6Ld4a-osAAAAAI4WQbqNttxKKgfFlx2rOTcnK-oR';
+const RECAPTCHA_ENTERPRISE_PROJECT_ID = process.env.RECAPTCHA_ENTERPRISE_PROJECT_ID || 'zigzag-hairplace';
+const RECAPTCHA_ENTERPRISE_API_KEY = process.env.RECAPTCHA_ENTERPRISE_API_KEY || '';
+const RECAPTCHA_ENTERPRISE_MIN_SCORE = Number.parseFloat(process.env.RECAPTCHA_ENTERPRISE_MIN_SCORE || '0.5');
 
 async function ensureRuntimeSchema() {
   await pool.query('ALTER TABLE "appointments" ADD COLUMN IF NOT EXISTS "duration_minutes" INTEGER NOT NULL DEFAULT 60');
@@ -305,6 +309,88 @@ function hasUsablePhoneNumber(phone) {
   return normalizeClientPhone(phone).replace(/\D/g, '').length >= 7;
 }
 
+async function assessRecaptchaEnterpriseToken(token, expectedAction) {
+  if (!RECAPTCHA_ENTERPRISE_API_KEY) {
+    throw new Error('Server reCAPTCHA Enterprise API key is not configured');
+  }
+
+  const url = new URL(`https://recaptchaenterprise.googleapis.com/v1/projects/${RECAPTCHA_ENTERPRISE_PROJECT_ID}/assessments`);
+  url.searchParams.set('key', RECAPTCHA_ENTERPRISE_API_KEY);
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      event: {
+        token,
+        siteKey: RECAPTCHA_ENTERPRISE_SITE_KEY,
+        expectedAction,
+      },
+    }),
+  });
+
+  const assessment = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const message = assessment.error?.message || 'Could not verify reCAPTCHA token';
+    throw new Error(message);
+  }
+
+  const tokenProperties = assessment.tokenProperties || {};
+  const riskAnalysis = assessment.riskAnalysis || {};
+  const score = typeof riskAnalysis.score === 'number' ? riskAnalysis.score : 0;
+
+  if (!tokenProperties.valid) {
+    return {
+      ok: false,
+      error: 'reCAPTCHA token is invalid or expired',
+      details: tokenProperties.invalidReason || null,
+    };
+  }
+
+  if (tokenProperties.action !== expectedAction) {
+    return {
+      ok: false,
+      error: 'reCAPTCHA action did not match this request',
+      details: tokenProperties.action || null,
+    };
+  }
+
+  if (score < RECAPTCHA_ENTERPRISE_MIN_SCORE) {
+    return {
+      ok: false,
+      error: 'reCAPTCHA risk score was too low',
+      score,
+    };
+  }
+
+  return { ok: true, score, reasons: riskAnalysis.reasons || [] };
+}
+
+function requireRecaptchaEnterprise(expectedAction) {
+  return async (req, res, next) => {
+    const token = req.body?.recaptchaToken || req.get('x-recaptcha-token');
+    if (!token) {
+      return res.status(400).json({ error: 'reCAPTCHA token is required' });
+    }
+
+    try {
+      const result = await assessRecaptchaEnterpriseToken(token, expectedAction);
+      if (!result.ok) {
+        return res.status(403).json({ error: result.error });
+      }
+
+      req.recaptcha = result;
+      if (req.body?.recaptchaToken) {
+        delete req.body.recaptchaToken;
+      }
+      next();
+    } catch (error) {
+      console.error('reCAPTCHA verification failed:', error);
+      res.status(500).json({ error: 'Could not verify reCAPTCHA. Try again shortly.' });
+    }
+  };
+}
+
 function normalizeDateKey(value) {
   if (value instanceof Date) {
     const year = value.getFullYear();
@@ -391,7 +477,7 @@ const authenticateToken = (req, res, next) => {
 
 // ==================== AUTH ROUTES ====================
 
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', requireRecaptchaEnterprise('LOGIN'), async (req, res) => {
   const { email, password } = req.body;
   try {
     // Correct SQL query
@@ -897,7 +983,7 @@ app.post('/api/booking-confirmations/confirm', async (req, res) => {
   }
 });
 
-app.post('/api/appointments', async (req, res) => {
+app.post('/api/appointments', requireRecaptchaEnterprise('BOOK_APPOINTMENT'), async (req, res) => {
   const { barberId, date, time, clientName, clientPhone, serviceType, durationMinutes } = req.body;
   const parsedBarberId = parseInt(barberId);
   if (isNaN(parsedBarberId) || !date || !time || !clientName || !clientPhone) {
@@ -1363,7 +1449,7 @@ app.get('/api/reviews/average/:barberId', async (req, res) => {
   }
 });
 
-app.post('/api/reviews', async (req, res) => {
+app.post('/api/reviews', requireRecaptchaEnterprise('SUBMIT_REVIEW'), async (req, res) => {
   const { barberId, clientName, clientPhone, rating, comment } = req.body;
 
   if (!barberId || !clientName || !clientPhone || !rating) {

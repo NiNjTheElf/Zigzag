@@ -1,4 +1,5 @@
 import { API_BASE } from './api-config.js';
+import { getRecaptchaEnterpriseToken } from './recaptcha-enterprise.js';
 const STORAGE_KEY_TOKEN = 'zigzagStaffToken';
 
 const state = {
@@ -614,9 +615,10 @@ function dateToDateKey(date) {
 }
 
 async function login(email, password) {
+  const recaptchaToken = await getRecaptchaEnterpriseToken('LOGIN');
   const data = await apiCall('/auth/login', {
     method: 'POST',
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, password, recaptchaToken }),
   });
   saveSession(data.token, data.user);
   return data.user;

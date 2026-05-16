@@ -27,7 +27,16 @@
     ],
     "headers": [
       {
-        "source": "**/*.@(js|css|woff2)",
+        "source": "**/*.@(js|css)",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
+      },
+      {
+        "source": "**/*.@(woff2|png|jpg|jpeg|gif|webp|svg)",
         "headers": [
           {
             "key": "Cache-Control",
