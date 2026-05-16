@@ -514,21 +514,6 @@ async function checkBookingAvailability(barberId, date, time, duration, db = poo
     : { available: false, error: 'Time slot is no longer available' };
 }
 
-async function getClientAppointmentsForPhone(phoneNumber) {
-  const result = await pool.query(
-    `SELECT
-        a.*,
-        u."name" AS "barber_name"
-     FROM "appointments" a
-     LEFT JOIN "users" u ON u."id" = a."barber_id"
-     WHERE a."client_phone" = $1
-        OR regexp_replace(a."client_phone", '[\\s().-]', '', 'g') = $1
-     ORDER BY a."appointment_date" DESC, a."appointment_time" DESC`,
-    [normalizePhoneForComparison(phoneNumber)]
-  );
-  return result.rows.map(normalizeAppointmentRecord);
-}
-
 async function sendBookingConfirmationCode(phone, code) {
   console.log(`Booking confirmation code for ${phone}: ${code}`);
   return { channel: 'demo_sms', message: 'Demo SMS generated. Connect an SMS provider to send this for real.' };
@@ -1143,16 +1128,6 @@ app.post('/api/appointments', requireRecaptchaEnterprise('BOOK_APPOINTMENT'), re
     }
     console.error(error);
     res.status(500).json({ error: 'Failed to create appointment' });
-  }
-});
-
-app.get('/api/client/appointments', requireFirebasePhoneAuth, async (req, res) => {
-  try {
-    const appointments = await getClientAppointmentsForPhone(req.firebasePhoneUser.phoneNumber);
-    res.json({ phoneNumber: req.firebasePhoneUser.phoneNumber, appointments });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Failed to fetch client appointments' });
   }
 });
 

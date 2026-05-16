@@ -1,10 +1,8 @@
 import { API_BASE } from './api-config.js';
 import {
   getCurrentPhoneIdToken,
-  onPhoneAuthStateChanged,
   resetPhoneVerification,
   sendPhoneVerificationCode,
-  signOutPhoneUser,
   verifyPhoneCode,
 } from './phone-auth.js';
 import { getRecaptchaEnterpriseToken } from './recaptcha-enterprise.js';
@@ -36,13 +34,6 @@ const elements = {
   confirmBookingButton: document.getElementById('booking-confirm-button'),
   cancelConfirmationButton: document.getElementById('booking-cancel-confirmation'),
   demoCode: document.getElementById('booking-demo-code'),
-  clientLoginForm: document.getElementById('client-login-form'),
-  clientLoginPhone: document.getElementById('client-login-phone'),
-  clientLoginCode: document.getElementById('client-login-code'),
-  clientSendCodeButton: document.getElementById('client-send-code-button'),
-  clientConfirmCodeButton: document.getElementById('client-confirm-code-button'),
-  clientLogoutButton: document.getElementById('client-logout-button'),
-  clientAppointmentList: document.getElementById('client-appointment-list'),
   gallery: document.getElementById('barber-gallery'),
   toast: document.getElementById('booking-toast'),
 };
@@ -55,12 +46,8 @@ const state = {
   todayDateKey: '',
   closedDateKeys: new Set(),
   pendingConfirmation: null,
-  pendingClientLoginPhone: '',
-  clientPhone: '',
   isRequestingConfirmation: false,
   isConfirmingBooking: false,
-  isClientLoginSending: false,
-  isClientLoginConfirming: false,
 };
 
 function showToast(message) {
@@ -110,20 +97,6 @@ function resetPendingConfirmation() {
   if (elements.confirmationCode) elements.confirmationCode.value = '';
   if (elements.demoCode) elements.demoCode.textContent = '';
   syncBookingSubmitButton();
-}
-
-async function phoneApiCall(endpoint, options = {}) {
-  const idToken = await getCurrentPhoneIdToken();
-  if (!idToken) {
-    throw new Error('Verify your phone first.');
-  }
-  return apiCall(endpoint, {
-    ...options,
-    headers: {
-      ...options.headers,
-      Authorization: `Bearer ${idToken}`,
-    },
-  });
 }
 
 function syncBookingSubmitButton() {
@@ -189,121 +162,6 @@ function renderPendingConfirmation(data) {
   elements.confirmationCode?.focus();
 }
 
-function renderClientAppointments(appointments = []) {
-  if (!elements.clientAppointmentList) return;
-  elements.clientAppointmentList.innerHTML = '';
-
-  if (!appointments.length) {
-    elements.clientAppointmentList.innerHTML = '<p class="form-note">No appointments found for this phone number.</p>';
-    return;
-  }
-
-  appointments.forEach(appointment => {
-    const item = document.createElement('div');
-    item.className = 'client-appointment-item';
-    const date = formatIsoDateShort(appointment.appointment_date);
-    item.innerHTML = `
-      <strong>${date} at ${appointment.appointment_time}</strong>
-      <span>${appointment.barber_name || 'Selected barber'}</span>
-      <span>${appointment.service_type || 'Service'} ${appointment.duration_minutes ? `- ${appointment.duration_minutes} min` : ''}</span>
-    `;
-    elements.clientAppointmentList.appendChild(item);
-  });
-}
-
-function syncClientLoginControls() {
-  if (!elements.clientSendCodeButton) return;
-  elements.clientSendCodeButton.disabled = state.isClientLoginSending;
-  elements.clientSendCodeButton.textContent = state.isClientLoginSending ? 'Sending...' : 'Send code';
-  if (elements.clientLoginCode) elements.clientLoginCode.disabled = !state.pendingClientLoginPhone;
-  if (elements.clientConfirmCodeButton) {
-    elements.clientConfirmCodeButton.disabled = !state.pendingClientLoginPhone || state.isClientLoginConfirming;
-    elements.clientConfirmCodeButton.textContent = state.isClientLoginConfirming ? 'Checking...' : 'Check appointments';
-  }
-  elements.clientLogoutButton?.classList.toggle('hidden', !state.clientPhone);
-}
-
-async function sendClientLoginCode(event) {
-  event.preventDefault();
-  if (state.isClientLoginSending) return;
-  let phone;
-  try {
-    phone = normalizeFirebasePhone(elements.clientLoginPhone.value.trim());
-  } catch (error) {
-    showToast(error.message);
-    return;
-  }
-
-  state.isClientLoginSending = true;
-  syncClientLoginControls();
-  try {
-    const result = await sendPhoneVerificationCode(phone);
-    if (!result.success) {
-      throw new Error(result.error || 'Could not send SMS code.');
-    }
-    state.pendingClientLoginPhone = phone;
-    if (elements.clientLoginCode) {
-      elements.clientLoginCode.disabled = false;
-      elements.clientLoginCode.focus();
-    }
-    showToast(result.reused ? 'Use the code already sent.' : 'Login code sent.');
-  } catch (error) {
-    showToast('Could not send login code: ' + error.message);
-  } finally {
-    state.isClientLoginSending = false;
-    syncClientLoginControls();
-  }
-}
-
-async function confirmClientLogin() {
-  if (state.isClientLoginConfirming) return;
-  const code = elements.clientLoginCode?.value.trim();
-  if (!state.pendingClientLoginPhone) {
-    showToast('Send a login code first.');
-    return;
-  }
-  if (!code || code.length < 6) {
-    showToast('Enter the 6-digit SMS code.');
-    return;
-  }
-
-  state.isClientLoginConfirming = true;
-  syncClientLoginControls();
-  try {
-    const result = await verifyPhoneCode(code);
-    if (!result.success) {
-      throw new Error(result.error || 'Phone login failed.');
-    }
-    state.clientPhone = state.pendingClientLoginPhone;
-    state.pendingClientLoginPhone = '';
-    if (elements.clientLoginCode) elements.clientLoginCode.value = '';
-    await loadClientAppointments();
-    showToast('Phone verified.');
-  } catch (error) {
-    showToast('Login failed: ' + error.message);
-  } finally {
-    state.isClientLoginConfirming = false;
-    syncClientLoginControls();
-  }
-}
-
-async function loadClientAppointments() {
-  const data = await phoneApiCall('/client/appointments', { method: 'GET' });
-  state.clientPhone = data.phoneNumber || state.clientPhone;
-  renderClientAppointments(data.appointments || []);
-  syncClientLoginControls();
-}
-
-async function logoutClient() {
-  await signOutPhoneUser();
-  state.clientPhone = '';
-  state.pendingClientLoginPhone = '';
-  if (elements.clientLoginCode) elements.clientLoginCode.value = '';
-  renderClientAppointments([]);
-  syncClientLoginControls();
-  showToast('Logged out.');
-}
-
 async function requestBookingConfirmation(payload) {
   const phone = normalizeFirebasePhone(payload.clientPhone);
   const normalizedPayload = { ...payload, clientPhone: phone };
@@ -355,7 +213,6 @@ async function confirmPendingBooking() {
         method: 'POST',
         body: JSON.stringify({ ...pending.payload, recaptchaToken, firebaseIdToken }),
       });
-      state.clientPhone = pending.client_phone;
     } else {
       await apiCall('/booking-confirmations/confirm', {
         method: 'POST',
@@ -368,7 +225,6 @@ async function confirmPendingBooking() {
     populateServiceSelect(elements.barberSelect.value);
     setSelectedBookingDate(state.todayDateKey, { keepMonth: false, render: true, loadSlots: false });
     renderAvailableSlots();
-    loadClientAppointments().catch(() => {});
   } catch (error) {
     showToast('Confirmation failed: ' + error.message);
   } finally {
@@ -421,24 +277,6 @@ function formatSelectedDateLabel(dateKey) {
   if (!date) return 'Selected date: --';
   const pretty = date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
   return `Selected date: ${pretty}`;
-}
-
-function formatIsoDateShort(rawDate) {
-  const dateKey = normalizeDateKey(rawDate);
-  return dateKey ? dateKey.replace(/-/g, '.') : '';
-}
-
-function normalizeDateKey(rawDate) {
-  if (!rawDate) return '';
-  if (typeof rawDate === 'string') {
-    const match = rawDate.match(/^(\d{4}-\d{2}-\d{2})/);
-    if (match) return match[1];
-  }
-  if (rawDate instanceof Date && !Number.isNaN(rawDate.getTime())) {
-    return formatDateForInput(rawDate);
-  }
-  const parsed = new Date(rawDate);
-  return Number.isNaN(parsed.getTime()) ? '' : formatDateForInput(parsed);
 }
 
 function getMonthStart(date) {
@@ -1078,15 +916,6 @@ function bindEvents() {
   });
   elements.clientName.addEventListener('input', resetPendingConfirmation);
   elements.clientPhone.addEventListener('input', resetPendingConfirmation);
-  elements.clientLoginForm?.addEventListener('submit', sendClientLoginCode);
-  elements.clientConfirmCodeButton?.addEventListener('click', confirmClientLogin);
-  elements.clientLogoutButton?.addEventListener('click', logoutClient);
-  elements.clientLoginCode?.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      confirmClientLogin();
-    }
-  });
   elements.confirmBookingButton?.addEventListener('click', confirmPendingBooking);
   elements.cancelConfirmationButton?.addEventListener('click', resetPendingConfirmation);
   elements.confirmationCode?.addEventListener('keydown', (event) => {
@@ -1107,14 +936,6 @@ async function init() {
   }
   setSelectedBookingDate(state.todayDateKey, { keepMonth: false, render: true, loadSlots: false });
   bindEvents();
-  syncClientLoginControls();
-  onPhoneAuthStateChanged(user => {
-    state.clientPhone = user?.phoneNumber || '';
-    syncClientLoginControls();
-    if (user?.phoneNumber) {
-      loadClientAppointments().catch(() => {});
-    }
-  });
   await fetchBarbers();
   renderBarberCards();
   fillBarberSelect();

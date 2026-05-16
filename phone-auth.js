@@ -4,7 +4,6 @@
 import { auth } from './firebase-config.js';
 import {
   deleteUser,
-  onAuthStateChanged,
   PhoneAuthProvider,
   RecaptchaVerifier,
   signInWithCredential,
@@ -184,18 +183,6 @@ export async function getCurrentPhoneIdToken() {
   return user.getIdToken();
 }
 
-export function getCurrentPhoneUser() {
-  return auth.currentUser;
-}
-
-export async function signOutPhoneUser() {
-  await signOut(auth);
-  resetPhoneVerification();
-}
-
-export function onPhoneAuthStateChanged(callback) {
-  return onAuthStateChanged(auth, callback);
-}
 
 /**
  * Reset phone verification state
