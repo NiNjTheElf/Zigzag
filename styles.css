@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Russo+One&family=IBM+Plex+Sans+Condensed:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600;700&display=swap');
+﻿@import url('https://fonts.googleapis.com/css2?family=Russo+One&family=IBM+Plex+Sans+Condensed:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600;700&display=swap');
 
 :root {
   color-scheme: light;
@@ -4288,5 +4288,572 @@ img {
 @keyframes skeleton-shimmer {
   100% {
     transform: translateX(100%);
+  }
+}
+
+/* Luxury minimal refresh - warm brown / soft gray */
+:root,
+body.light-theme {
+  color-scheme: light;
+  --bg-color: #eeebe5;
+  --surface: rgba(248, 246, 241, 0.94);
+  --surface-strong: #fffdf8;
+  --surface-soft: #e2ddd3;
+  --text-main: #181714;
+  --text-muted: #635d54;
+  --text-faint: #90877c;
+  --line: rgba(43, 37, 30, 0.12);
+  --line-strong: rgba(43, 37, 30, 0.24);
+  --concrete: #77716a;
+  --asphalt: #2f302c;
+  --rust: #6b4a32;
+  --rust-dark: #2b211b;
+  --amber: #9b7449;
+  --blue-grey: #657a7b;
+  --moss: #6f7a66;
+  --danger: #9c3f34;
+  --shadow: 0 28px 70px rgba(36, 30, 24, 0.13);
+  font-family: 'IBM Plex Sans Condensed', 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+html {
+  background: #eeebe5;
+}
+
+body,
+body.light-theme {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.72) 0, rgba(255, 255, 255, 0) 360px),
+    linear-gradient(90deg, rgba(47, 39, 31, 0.045) 1px, transparent 1px),
+    #eeebe5;
+  background-size: auto, 112px 112px, auto;
+  color: var(--text-main);
+  font-family: 'IBM Plex Sans Condensed', 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+body::before,
+body::after {
+  display: none;
+}
+
+.page-shell {
+  width: min(1360px, calc(100% - 56px));
+  padding-bottom: 48px;
+}
+
+.site-header {
+  position: sticky;
+  top: 14px;
+  z-index: 12;
+  margin-top: 14px;
+  padding: 12px 14px 12px 20px;
+  border: 1px solid rgba(35, 30, 25, 0.12);
+  border-radius: 8px;
+  background: rgba(248, 246, 241, 0.9);
+  box-shadow: 0 16px 42px rgba(34, 29, 24, 0.1);
+  backdrop-filter: blur(18px);
+}
+
+.brand {
+  color: #171512;
+  font-family: 'Russo One', 'Arial Black', system-ui, sans-serif;
+  font-size: 1.08rem;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+}
+
+.site-nav {
+  gap: 4px;
+}
+
+.site-nav a {
+  border-radius: 8px;
+  color: #6f675d;
+  font-size: 0.96rem;
+  font-weight: 700;
+  padding: 9px 12px;
+}
+
+.site-nav a:hover {
+  background: rgba(107, 74, 50, 0.08);
+  color: #201b16;
+}
+
+.btn,
+.tab-button,
+.slot-grid button,
+.staff-card button,
+.dayoff-item-delete,
+.photo-remove-btn,
+.close-btn {
+  border-radius: 8px;
+  border-color: rgba(35, 30, 25, 0.16);
+  background: #f8f6f1;
+  box-shadow: none;
+  color: #201b16;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.btn:hover,
+.tab-button:hover,
+.slot-grid button:hover {
+  border-color: rgba(107, 74, 50, 0.42);
+  background: #fffdf8;
+  color: #171512;
+  transform: translateY(-1px);
+}
+
+.btn-primary,
+.booking-service-option.selected,
+.slot-grid button.selected,
+.tab-button.active {
+  border-color: #2b211b;
+  background: #2b211b;
+  color: #fffaf1;
+  box-shadow: 0 14px 34px rgba(43, 33, 27, 0.2);
+}
+
+.btn-primary:hover {
+  background: #6b4a32;
+  border-color: #6b4a32;
+  color: #fffaf1;
+}
+
+.btn-secondary,
+.btn-black {
+  border-color: rgba(35, 30, 25, 0.16);
+  background: rgba(255, 255, 255, 0.52);
+  color: #211d18;
+}
+
+.hero-section {
+  grid-template-columns: minmax(0, 0.9fr) minmax(420px, 1.1fr);
+  gap: 54px;
+  min-height: calc(100vh - 92px);
+  padding: 56px 0 44px;
+}
+
+.hero-copy .eyebrow,
+.section-heading .eyebrow,
+.dashboard-title-block .eyebrow,
+.booking-promo .eyebrow,
+.street-strip span {
+  color: #8a6541;
+  font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+}
+
+.hero-copy h1 {
+  color: #171512;
+  font-family: 'Russo One', 'Arial Black', system-ui, sans-serif;
+  font-size: 5.9rem;
+  font-weight: 400;
+  line-height: 0.88;
+  max-width: 760px;
+  text-shadow: none;
+}
+
+.section-heading h2,
+.booking-promo h2,
+.dashboard-title-block h2 {
+  color: #171512;
+  font-size: 3rem;
+  font-weight: 700;
+  line-height: 1;
+  text-shadow: none;
+}
+
+.hero-copy p {
+  color: #625a51;
+  font-size: 1.16rem;
+  max-width: 520px;
+}
+
+.hero-highlights {
+  gap: 10px;
+  margin-top: 34px;
+}
+
+.hero-highlights div,
+.booking-card,
+.contact-box,
+.barber-profile-card,
+.service-card,
+.location-map,
+.dayoff-form-container,
+.dayoff-calendar-container,
+.booking-calendar-panel,
+.modal-panel,
+.dashboard-panel,
+.dashboard-header-sticky,
+.pull-panel,
+.calendar-card,
+.booking-window-calendar {
+  border: 1px solid rgba(43, 37, 30, 0.12);
+  background: rgba(248, 246, 241, 0.92);
+  box-shadow: 0 24px 58px rgba(36, 30, 24, 0.1);
+}
+
+.hero-highlights div {
+  min-height: 116px;
+  padding: 17px;
+}
+
+.hero-highlights div::before {
+  background: #9b7449;
+}
+
+.hero-highlights strong,
+.booking-card h3,
+.booking-card h4,
+.contact-box h3,
+.service-card h3,
+.barber-profile-info strong,
+.dashboard-title-block h2 {
+  color: #171512;
+}
+
+.hero-highlights span,
+.service-empty,
+.form-note,
+.material-grid span,
+.contact-box p,
+.service-card p,
+.barber-profile-info p,
+.dayoff-item p,
+.staff-card span,
+.slot-message,
+.service-card-duration,
+.booking-service-option small {
+  color: #6f675d;
+}
+
+.hero-image,
+.hero-photo-frame,
+.studio-photo,
+.subpage-visual {
+  min-height: 610px;
+}
+
+.hero-frame,
+.hero-photo-frame,
+.studio-photo,
+.subpage-visual {
+  border: 1px solid rgba(43, 37, 30, 0.14);
+  background: #d8d1c6;
+  box-shadow: 0 34px 86px rgba(36, 30, 24, 0.18);
+}
+
+.hero-photo-frame img,
+.studio-photo img,
+.subpage-visual img,
+.gallery-image,
+.barber-profile-images img,
+.editable-photo-card img,
+.cube-tile {
+  filter: grayscale(0.08) saturate(0.74) contrast(1.04) brightness(0.98);
+}
+
+.street-strip div,
+.booking-promo {
+  border: 1px solid rgba(43, 37, 30, 0.13);
+  background: #2b211b;
+  box-shadow: 0 24px 58px rgba(36, 30, 24, 0.16);
+  color: #fffaf1;
+}
+
+.street-strip span,
+.booking-promo .eyebrow,
+.booking-promo h2 {
+  color: #fffaf1;
+}
+
+.section {
+  border-top-color: rgba(43, 37, 30, 0.1);
+  padding: 68px 0;
+}
+
+.booking-card,
+.contact-box,
+.location-map,
+.dayoff-form-container,
+.dayoff-calendar-container,
+.barber-profile-card,
+.service-card {
+  padding: 28px;
+}
+
+.form-group label {
+  color: #4e473f;
+  font-size: 0.94rem;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea,
+.booking-native-date {
+  border: 1px solid rgba(43, 37, 30, 0.14);
+  background: #fffdf8;
+  color: #171512;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+  border-color: rgba(107, 74, 50, 0.68);
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(107, 74, 50, 0.14);
+}
+
+.booking-service-block,
+.booking-confirmation,
+.booking-window-calendar,
+.calendar-controls,
+.booking-calendar-header,
+.tabs-nav {
+  border-color: rgba(43, 37, 30, 0.12);
+  background: rgba(255, 253, 248, 0.64);
+}
+
+.booking-service-option,
+.slot-grid button,
+.tab-button,
+.dayoff-item,
+.staff-card,
+.calendar-day,
+#booking-calendar .calendar-day {
+  border: 1px solid rgba(43, 37, 30, 0.12);
+  background: #fffdf8;
+  color: #171512;
+}
+
+.booking-service-option:hover,
+.slot-grid button:hover,
+.tab-button:hover {
+  border-color: rgba(107, 74, 50, 0.34);
+  background: #ffffff;
+}
+
+.service-card-image,
+.service-option-empty,
+.barber-profile-placeholder,
+.editable-photo-card,
+.booking-service-option img {
+  border-color: rgba(43, 37, 30, 0.12);
+  background: #e7e0d6;
+  color: #6f675d;
+}
+
+.barber-social-links a,
+.contact-box a,
+.phone-number,
+.barber-reviews .review-stars,
+.stars,
+.star-btn {
+  color: #6b4a32;
+}
+
+.location-map iframe {
+  filter: grayscale(1) contrast(0.95) brightness(1.04);
+}
+
+.dashboard-header-sticky {
+  margin-bottom: 14px;
+  position: sticky;
+  top: 92px;
+}
+
+.tabs-nav {
+  border: 1px solid rgba(43, 37, 30, 0.12);
+  border-radius: 8px;
+  gap: 6px;
+  margin: 16px 0;
+  padding: 6px;
+}
+
+.calendar-card,
+.booking-window-calendar {
+  --calendar-accent: #2b211b;
+  --calendar-accent-soft: rgba(107, 74, 50, 0.14);
+  --calendar-open: #6f7a66;
+  --calendar-booked: #657a7b;
+  --calendar-closed: #9c3f34;
+  background: rgba(248, 246, 241, 0.94);
+}
+
+.calendar-controls span,
+.calendar-controls h3,
+.booking-calendar-month,
+.booking-selected-date,
+.calendar-day-number {
+  color: #171512;
+}
+
+.calendar-grid > div:not(.calendar-day),
+#booking-calendar.calendar-grid > div:not(.calendar-day) {
+  color: #77716a;
+}
+
+.calendar-day,
+#booking-calendar .calendar-day {
+  min-height: 88px;
+  box-shadow: none;
+}
+
+.calendar-day-number,
+.calendar-day-indicator,
+.calendar-day-count,
+.booking-selected-date,
+.booking-confirmation-summary span,
+#booking-confirmation-timer {
+  background: rgba(43, 33, 27, 0.06);
+  color: #5a5148;
+}
+
+.calendar-day.today,
+#booking-calendar .calendar-day.window-today {
+  border-color: rgba(107, 74, 50, 0.46);
+  background: #f3eee6;
+}
+
+.calendar-day.today .calendar-day-number,
+#booking-calendar .calendar-day.window-today .calendar-day-number {
+  background: #2b211b;
+  color: #fffaf1;
+}
+
+.calendar-day.has-appointments,
+#booking-calendar .calendar-day.window-future {
+  border-color: rgba(101, 122, 123, 0.34);
+  background: #eef1ef;
+}
+
+.calendar-day.has-dayoff,
+.calendar-day.has-recurring-dayoff,
+#booking-calendar .calendar-day.window-closed {
+  border-color: rgba(156, 63, 52, 0.32);
+  background: #f5e8e4;
+  color: #5d241e;
+}
+
+.calendar-day.selected-day,
+.calendar-day.selected-off,
+#booking-calendar .calendar-day.window-selected {
+  border-color: #2b211b;
+  box-shadow: 0 0 0 2px rgba(43, 33, 27, 0.12), 0 14px 28px rgba(36, 30, 24, 0.12);
+}
+
+.modal {
+  background: rgba(24, 21, 18, 0.56);
+}
+
+.modal-panel,
+.dashboard-panel {
+  background: #f8f6f1;
+}
+
+.toast {
+  background: #2b211b;
+  color: #fffaf1;
+  box-shadow: 0 18px 40px rgba(36, 30, 24, 0.22);
+}
+
+.site-footer {
+  border-top-color: rgba(43, 37, 30, 0.1);
+  color: #77716a;
+}
+
+@media (max-width: 980px) {
+  .hero-section {
+    grid-template-columns: 1fr;
+    gap: 28px;
+    min-height: 0;
+    padding-top: 42px;
+  }
+
+  .hero-copy h1 {
+    font-size: 4.4rem;
+  }
+
+  .hero-image,
+  .hero-photo-frame,
+  .studio-photo,
+  .subpage-visual {
+    min-height: 480px;
+  }
+}
+
+@media (max-width: 760px) {
+  .page-shell {
+    width: min(100% - 22px, 1360px);
+  }
+
+  .site-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+    top: 8px;
+  }
+
+  .site-nav,
+  .header-actions {
+    width: 100%;
+  }
+
+  .site-nav a,
+  .header-actions .btn {
+    flex: 1 1 auto;
+  }
+
+  .hero-copy h1 {
+    font-size: 3.25rem;
+  }
+
+  .section-heading h2,
+  .booking-promo h2,
+  .dashboard-title-block h2 {
+    font-size: 2.2rem;
+  }
+
+  .hero-highlights,
+  .about-grid,
+  .service-grid,
+  .contact-grid,
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .booking-card,
+  .contact-box,
+  .location-map,
+  .dayoff-form-container,
+  .dayoff-calendar-container,
+  .barber-profile-card,
+  .service-card {
+    padding: 20px;
+  }
+}
+
+@media (max-width: 520px) {
+  .page-shell {
+    width: min(100% - 18px, 1360px);
+  }
+
+  .brand {
+    font-size: 0.96rem;
+  }
+
+  .hero-copy h1 {
+    font-size: 2.7rem;
+  }
+
+  .hero-image,
+  .hero-photo-frame,
+  .studio-photo,
+  .subpage-visual {
+    min-height: 330px;
   }
 }
