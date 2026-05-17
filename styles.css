@@ -27,27 +27,7 @@
   font-size: 16px;
 }
 
-body.light-theme {
-  color-scheme: dark;
-  --bg-color: #10110f;
-  --surface: rgba(24, 25, 23, 0.86);
-  --surface-strong: rgba(15, 16, 15, 0.94);
-  --surface-soft: rgba(214, 211, 199, 0.055);
-  --text-main: #ece8dd;
-  --text-muted: #b7b0a2;
-  --text-faint: #898477;
-  --line: rgba(236, 232, 221, 0.13);
-  --line-strong: rgba(236, 232, 221, 0.24);
-  --concrete: #d1cdc0;
-  --asphalt: #161816;
-  --rust: #a84735;
-  --rust-dark: #6f2f29;
-  --amber: #d7a857;
-  --blue-grey: #8ea2a5;
-  --moss: #667866;
-  --danger: #e25d4d;
-  --shadow: 0 24px 80px rgba(0, 0, 0, 0.42);
-}
+
 
 * {
   box-sizing: border-box;
@@ -77,13 +57,7 @@ body {
   transition: background-color 0.3s ease;
 }
 
-body.light-theme {
-  background:
-    radial-gradient(circle at 14% 10%, rgba(168, 71, 53, 0.18), transparent 28rem),
-    radial-gradient(circle at 88% 8%, rgba(142, 162, 165, 0.14), transparent 24rem),
-    linear-gradient(140deg, rgba(255, 255, 255, 0.035), transparent 36%),
-    linear-gradient(180deg, #20211d 0%, #121311 48%, #0d0e0c 100%);
-}
+
 
 body::before,
 body::after {
@@ -371,30 +345,11 @@ button {
   border-top: 1px solid rgba(236, 232, 221, 0.18);
 }
 
-.hero-card {
-  position: absolute;
-  left: 22px;
-  bottom: 22px;
-  width: min(340px, calc(100% - 44px));
-  padding: 24px;
-  border-radius: 8px;
-  background: rgba(12, 13, 12, 0.9);
-  border: 1px solid rgba(236, 232, 221, 0.18);
-  box-shadow: 0 22px 70px rgba(0, 0, 0, 0.44);
-  backdrop-filter: blur(14px);
-  z-index: 2;
-}
 
-.hero-card p {
-  margin: 0 0 10px;
-  color: var(--text-muted);
-}
 
-.hero-card strong {
-  color: var(--amber);
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 1.45rem;
-}
+
+
+
 
 .section {
   padding: clamp(46px, 6vw, 76px) 0;
@@ -413,21 +368,15 @@ button {
   letter-spacing: 0;
 }
 
-.about-grid,
-.service-grid,
 .contact-grid,
-.dashboard-grid,
 .barber-profile-grid,
 .service-card-grid,
-.location-grid,
 .location-gallery,
 .photo-preview-grid {
   display: grid;
   gap: 16px;
 }
 
-.about-grid,
-.service-grid,
 .contact-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
@@ -445,10 +394,7 @@ button {
   margin-bottom: 18px;
 }
 
-.location-grid {
-  grid-template-columns: 1fr;
-  margin-top: 26px;
-}
+
 
 .location-gallery {
   display: grid;
@@ -487,7 +433,6 @@ button {
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
 }
 
-.about-grid h3,
 .service-card h3,
 .contact-box h3,
 .booking-card h3,
@@ -496,7 +441,6 @@ button {
   color: var(--text-main);
 }
 
-.about-grid p,
 .service-card p,
 .contact-box p,
 .barber-profile-info p,
@@ -646,8 +590,7 @@ button {
   font-weight: 800;
 }
 
-.service-card-duration,
-.booking-service-option small {
+.service-card-duration {
   color: var(--text-muted);
   font-size: 0.82rem;
   font-weight: 700;
@@ -713,8 +656,7 @@ button {
   box-shadow: 0 8px 20px rgba(28, 32, 36, 0.06);
 }
 
-.booking-service-text,
-.booking-service-option small {
+.booking-service-text {
   min-width: 0;
 }
 
@@ -1363,47 +1305,15 @@ button {
     linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.44));
 }
 
-.hero-card {
-  left: auto;
-  right: 22px;
-  bottom: 22px;
-  border-left: 4px solid var(--rust);
-}
 
-.hero-card strong {
-  display: block;
-  max-width: 220px;
-  line-height: 1.05;
-}
 
-.street-strip {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 1px;
-  margin: -18px 0 28px;
-  border: 1px solid var(--line);
-  background: var(--line);
-  box-shadow: 0 18px 58px rgba(0, 0, 0, 0.22);
-}
 
-.street-strip div {
-  min-height: 72px;
-  padding: 18px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  background:
-    linear-gradient(145deg, rgba(236, 232, 221, 0.07), rgba(236, 232, 221, 0.025)),
-    rgba(14, 15, 13, 0.92);
-  color: var(--text-main);
-  font-weight: 800;
-}
 
-.street-strip span {
-  color: var(--amber);
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 0.9rem;
-}
+
+
+
+
+
 
 .studio-layout {
   display: grid;
@@ -1433,120 +1343,37 @@ button {
   pointer-events: none;
 }
 
-.studio-copy {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  gap: 22px;
-  padding: clamp(22px, 4vw, 38px);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background:
-    linear-gradient(130deg, rgba(102, 120, 102, 0.18), transparent 42%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.052), rgba(255, 255, 255, 0.022)),
-    rgba(19, 20, 18, 0.92);
-}
 
-.studio-copy > p {
-  margin: 0;
-  color: var(--text-muted);
-  font-size: clamp(1.08rem, 1.6vw, 1.32rem);
-}
 
-.material-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
 
-.material-grid div {
-  min-height: 150px;
-  padding: 18px;
-  border: 1px solid rgba(236, 232, 221, 0.12);
-  border-radius: 8px;
-  background:
-    linear-gradient(140deg, rgba(255, 255, 255, 0.055), transparent),
-    rgba(6, 7, 6, 0.32);
-}
 
-.material-grid strong {
-  display: block;
-  margin-bottom: 10px;
-  color: var(--text-main);
-  font-size: 1.02rem;
-}
 
-.material-grid span {
-  color: var(--text-muted);
-}
 
-.pull-section {
-  display: grid;
-  grid-template-columns: minmax(0, 0.95fr) minmax(360px, 1.05fr);
-  gap: clamp(18px, 4vw, 44px);
-  align-items: stretch;
-}
 
-.pull-panel {
-  padding: clamp(28px, 5vw, 54px);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background:
-    linear-gradient(135deg, rgba(168, 71, 53, 0.22), transparent 34%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)),
-    rgba(14, 15, 13, 0.95);
-  box-shadow: var(--shadow);
-}
 
-.pull-panel h2,
+
+
+
+
+
+
+
+
 .booking-promo h2 {
   margin: 0;
   font-size: clamp(2.4rem, 5.4vw, 5.4rem);
   line-height: 0.96;
 }
 
-.pull-panel p:not(.eyebrow) {
-  max-width: 620px;
-  margin: 20px 0 28px;
-  color: var(--text-muted);
-  font-size: 1.06rem;
-}
 
-.block-windows {
-  min-height: 430px;
-  padding: clamp(18px, 3vw, 30px);
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background:
-    linear-gradient(112deg, transparent 0 54%, rgba(0, 0, 0, 0.22) 54.2%, transparent 55%),
-    linear-gradient(180deg, #5a5d55, #272a25 54%, #121310);
-  box-shadow: var(--shadow);
-}
 
-.block-windows span {
-  min-height: 84px;
-  border: 1px solid rgba(236, 232, 221, 0.18);
-  border-radius: 3px;
-  background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.16), rgba(0, 0, 0, 0.2)),
-    rgba(14, 16, 15, 0.72);
-  box-shadow: inset 0 -22px 34px rgba(0, 0, 0, 0.24);
-}
 
-.block-windows span:nth-child(3n),
-.block-windows span:nth-child(8) {
-  background:
-    linear-gradient(145deg, rgba(215, 168, 87, 0.42), rgba(168, 71, 53, 0.18)),
-    rgba(14, 16, 15, 0.72);
-}
 
-.block-windows span:nth-child(5),
-.block-windows span:nth-child(11) {
-  opacity: 0.45;
-}
+
+
+
+
+
 
 .booking-promo {
   display: flex;
@@ -1562,6 +1389,10 @@ button {
     url('assets/zigzag-interior.avif') center / cover;
   box-shadow: var(--shadow);
   overflow: hidden;
+}
+
+.section.booking-promo {
+  padding: clamp(28px, 5vw, 54px);
 }
 
 .booking-promo > div {
@@ -1580,52 +1411,17 @@ button {
   padding-bottom: 48px;
 }
 
-.subpage-hero {
-  display: grid;
-  grid-template-columns: minmax(0, 0.82fr) minmax(360px, 1.18fr);
-  gap: clamp(18px, 4vw, 44px);
-  align-items: stretch;
-  padding-top: clamp(34px, 6vw, 78px);
-}
 
-.subpage-hero .section-heading {
-  max-width: none;
-  margin: 0;
-  align-self: center;
-}
 
-.subpage-hero .section-heading p:not(.eyebrow) {
-  max-width: 580px;
-  color: var(--text-muted);
-  font-size: 1.08rem;
-}
 
-.subpage-visual {
-  min-height: 380px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  overflow: hidden;
-  background: #0d0e0c;
-  box-shadow: var(--shadow);
-  position: relative;
-}
 
-.subpage-visual img {
-  width: 100%;
-  height: 100%;
-  display: block;
-  object-fit: cover;
-  filter: saturate(0.92) contrast(1.08) brightness(0.78);
-}
 
-.subpage-visual::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background:
-    linear-gradient(90deg, rgba(11, 12, 10, 0.62), transparent 45%),
-    repeating-linear-gradient(90deg, transparent 0 60px, rgba(236, 232, 221, 0.13) 60px 61px);
-}
+
+
+
+
+
+
 
 @media (max-width: 980px) {
   .page-shell {
@@ -1633,11 +1429,8 @@ button {
   }
 
   .hero-section,
-  .about-grid,
-  .service-grid,
-  .contact-grid,
-  .dashboard-grid,
-  .dayoff-section {
+.contact-grid,
+.dayoff-section {
     grid-template-columns: 1fr;
   }
 
@@ -1652,15 +1445,15 @@ button {
 
 @media (max-width: 760px) {
   .site-header,
-  .dashboard-header-sticky {
+.dashboard-header-sticky {
     flex-direction: column;
     align-items: stretch;
   }
 
   .header-actions,
-  .dashboard-actions,
-  .header-actions .btn,
-  .dashboard-actions .btn {
+.dashboard-actions,
+.header-actions .btn,
+.dashboard-actions .btn {
     width: 100%;
   }
 
@@ -1669,8 +1462,8 @@ button {
   }
 
   .hero-highlights,
-  .form-row,
-  .barber-profile-card {
+.form-row,
+.barber-profile-card {
     grid-template-columns: 1fr;
   }
 
@@ -1678,20 +1471,15 @@ button {
     min-height: 340px;
   }
 
-  .hero-card {
-    left: 14px;
-    bottom: 14px;
-    width: calc(100% - 28px);
-    padding: 18px;
-  }
+  
 
   .tabs-nav,
-  .tab-panel,
-  .dashboard-header-sticky,
-  .gallery-content,
-  .modal-panel .login-form,
-  .modal-panel > h2,
-  .gallery-modal-panel h2 {
+.tab-panel,
+.dashboard-header-sticky,
+.gallery-content,
+.modal-panel .login-form,
+.modal-panel > h2,
+.gallery-modal-panel h2 {
     padding-left: 18px;
     padding-right: 18px;
   }
@@ -1701,7 +1489,7 @@ button {
   }
 
   .calendar-controls h3,
-  .calendar-controls span {
+.calendar-controls span {
     min-width: 0;
   }
 
@@ -1718,17 +1506,17 @@ button {
   }
 
   .hero-copy h1,
-  .section-heading h2 {
+.section-heading h2 {
     font-size: clamp(2.35rem, 13vw, 3.15rem);
   }
 
   .hero-copy p,
-  .service-card p,
-  .contact-box p,
-  .barber-profile-info p,
-  .form-group label,
-  .btn,
-  .site-nav a {
+.service-card p,
+.contact-box p,
+.barber-profile-info p,
+.form-group label,
+.btn,
+.site-nav a {
     font-size: 0.95rem;
   }
 
@@ -1746,7 +1534,7 @@ button {
   }
 
   .calendar-day-indicator,
-  .appointment-indicator {
+.appointment-indicator {
     display: none;
   }
 }
@@ -1764,8 +1552,7 @@ button {
   }
 
   .hero-section,
-  .studio-layout,
-  .pull-section {
+.studio-layout {
     grid-template-columns: 1fr;
   }
 
@@ -1774,13 +1561,11 @@ button {
   }
 
   .hero-photo-frame,
-  .studio-photo {
+.studio-photo {
     min-height: 460px;
   }
 
-  .street-strip {
-    grid-template-columns: 1fr;
-  }
+  
 
   .booking-promo {
     align-items: flex-start;
@@ -1807,16 +1592,12 @@ button {
   }
 
   .hero-photo-frame,
-  .studio-photo {
+.studio-photo {
     min-height: 360px;
   }
 
-  .material-grid,
-  .block-windows {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
+  
 
-  .pull-panel h2,
   .booking-promo h2 {
     font-size: clamp(2.2rem, 11vw, 3.5rem);
   }
@@ -1828,24 +1609,15 @@ button {
   }
 
   .hero-photo-frame,
-  .studio-photo {
+.studio-photo {
     min-height: 300px;
   }
 
-  .hero-card {
-    right: 14px;
-    left: 14px;
-    width: auto;
-  }
+  
 
-  .material-grid,
-  .block-windows {
-    grid-template-columns: 1fr;
-  }
+  
 
-  .block-windows span:nth-child(n + 7) {
-    display: none;
-  }
+  
 }
 
 /* Chill light-gray redesign */
@@ -2015,9 +1787,7 @@ body::after {
 .location-map,
 .dayoff-form-container,
 .dayoff-calendar-container,
-.booking-calendar-panel,
-.studio-copy,
-.pull-panel {
+.booking-calendar-panel {
   background: rgba(255, 255, 255, 0.68);
   border-color: var(--line);
   box-shadow: var(--shadow);
@@ -2034,8 +1804,7 @@ body::after {
 
 .hero-highlights span,
 .service-empty,
-.form-note,
-.material-grid span {
+.form-note {
   color: var(--text-muted);
 }
 
@@ -2045,15 +1814,13 @@ body::after {
 
 .hero-frame,
 .hero-photo-frame,
-.studio-photo,
-.subpage-visual {
+.studio-photo {
   border-color: rgba(24, 27, 31, 0.14);
   box-shadow: var(--shadow);
 }
 
 .hero-photo-frame img,
-.studio-photo img,
-.subpage-visual img {
+.studio-photo img {
   filter: saturate(0.88) contrast(1.02) brightness(1.04);
 }
 
@@ -2069,46 +1836,17 @@ body::after {
     linear-gradient(180deg, transparent, rgba(255, 255, 255, 0.22));
 }
 
-.hero-card {
-  width: min(300px, calc(100% - 44px));
-  padding: 18px;
-  background: rgba(246, 246, 243, 0.88);
-  color: var(--text-main);
-  border-color: rgba(24, 27, 31, 0.13);
-  border-left-color: #8da8b8;
-  box-shadow: 0 16px 42px rgba(24, 27, 31, 0.13);
-}
 
-.hero-card p {
-  color: var(--text-muted);
-}
 
-.hero-card strong {
-  color: var(--text-main);
-  font-size: 1.18rem;
-}
 
-.street-strip {
-  gap: 10px;
-  margin: 8px 0 20px;
-  border: 0;
-  background: transparent;
-  box-shadow: none;
-}
 
-.street-strip div {
-  min-height: 58px;
-  padding: 14px 16px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.66);
-  color: var(--text-main);
-  box-shadow: 0 10px 26px rgba(28, 32, 36, 0.07);
-}
 
-.street-strip span {
-  color: #607483;
-}
+
+
+
+
+
+
 
 .section {
   padding: clamp(34px, 5vw, 58px) 0;
@@ -2119,8 +1857,7 @@ body::after {
   margin-bottom: 22px;
 }
 
-.section-heading h2,
-.subpage-hero .section-heading h2 {
+.section-heading h2 {
   font-size: clamp(2rem, 4.5vw, 4.4rem);
   line-height: 0.98;
 }
@@ -2133,16 +1870,9 @@ body::after {
   min-height: 520px;
 }
 
-.studio-copy {
-  justify-content: center;
-  min-height: 260px;
-}
 
-.studio-copy > p {
-  color: var(--text-main);
-  font-size: clamp(1.18rem, 2vw, 1.65rem);
-  line-height: 1.25;
-}
+
+
 
 .hero-photo-frame::before,
 .hero-photo-frame::after {
@@ -2322,19 +2052,16 @@ body::after {
   }
 
   .hero-section,
-  .studio-layout,
-  .subpage-hero {
+.studio-layout {
     grid-template-columns: 1fr;
   }
 
   .hero-image,
-  .hero-photo-frame,
-  .studio-photo,
-  .subpage-visual {
+.hero-photo-frame,
+.studio-photo {
     min-height: 420px;
   }
 
-  .street-strip,
   .contact-grid {
     grid-template-columns: 1fr;
   }
@@ -2376,31 +2103,22 @@ body::after {
   }
 
   .hero-image,
-  .hero-photo-frame,
-  .studio-photo,
-  .subpage-visual {
+.hero-photo-frame,
+.studio-photo {
     min-height: 330px;
   }
 
-  .hero-card {
-    left: 12px;
-    right: 12px;
-    bottom: 12px;
-    width: auto;
-  }
+  
 
   .section {
     padding: 32px 0;
   }
 
-  .section-heading h2,
-  .subpage-hero .section-heading h2 {
+  .section-heading h2 {
     font-size: clamp(2rem, 10vw, 3.2rem);
   }
 
-  .street-strip div {
-    min-height: 52px;
-  }
+  
 
   .booking-promo {
     padding: 22px;
@@ -2427,15 +2145,13 @@ body::after {
   }
 
   .hero-image,
-  .hero-photo-frame,
-  .studio-photo,
-  .subpage-visual {
+.hero-photo-frame,
+.studio-photo {
     min-height: 280px;
   }
 
-  .studio-copy,
   .booking-card,
-  .contact-box {
+.contact-box {
     padding: 18px;
   }
 
@@ -2503,8 +2219,7 @@ body::after {
 
 .hero-copy .eyebrow,
 .section-heading .eyebrow,
-.dashboard-title-block .eyebrow,
-.street-strip span {
+.dashboard-title-block .eyebrow {
   font-family: 'IBM Plex Mono', monospace;
 }
 
@@ -2527,25 +2242,9 @@ body::after {
   box-shadow: 0 16px 34px rgba(6, 8, 9, 0.4);
 }
 
-.street-strip div {
-  position: relative;
-  overflow: hidden;
-  background:
-    linear-gradient(140deg, rgba(87, 94, 93, 0.92), rgba(52, 57, 58, 0.95));
-  border-color: rgba(209, 220, 215, 0.25);
-  box-shadow: inset 0 0 0 1px rgba(234, 241, 237, 0.2), 0 10px 24px rgba(10, 13, 12, 0.3);
-}
 
-.street-strip div::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background:
-    repeating-linear-gradient(90deg, rgba(217, 226, 222, 0.12) 0 1px, transparent 1px 48px),
-    repeating-linear-gradient(0deg, rgba(217, 226, 222, 0.08) 0 1px, transparent 1px 28px);
-  pointer-events: none;
-}
+
+
 
 .booking-promo {
   position: relative;
@@ -2564,8 +2263,7 @@ body::after {
     repeating-linear-gradient(0deg, rgba(217, 226, 222, 0.08) 0 1px, transparent 1px 28px);
 }
 
-.booking-promo h2,
-.pull-panel h2 {
+.booking-promo h2 {
   text-transform: uppercase;
 }
 
@@ -2927,20 +2625,19 @@ body::after {
   }
 
   .booking-confirmation-summary,
-  .booking-code-row {
+.booking-code-row {
     grid-template-columns: 1fr;
   }
 
   .booking-confirmation-header,
-  .booking-confirmation-actions {
+.booking-confirmation-actions {
     align-items: stretch;
     flex-direction: column;
   }
 }
 
 /* Premium asphalt redesign */
-:root,
-body.light-theme {
+:root {
   color-scheme: dark;
   --bg-color: #111314;
   --surface: rgba(22, 25, 25, 0.88);
@@ -2969,8 +2666,7 @@ html {
   background: #111314;
 }
 
-body,
-body.light-theme {
+body {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.045), transparent 15rem),
     linear-gradient(115deg, transparent 0 18%, rgba(255, 255, 255, 0.025) 18.1% 18.35%, transparent 18.45%),
@@ -3128,8 +2824,7 @@ body::after {
 .booking-calendar-panel,
 .modal-panel,
 .dashboard-panel,
-.dashboard-header-sticky,
-.pull-panel {
+.dashboard-header-sticky {
   border: 1px solid rgba(232, 226, 211, 0.13);
   background:
     linear-gradient(145deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.018) 42%),
@@ -3157,7 +2852,6 @@ body::after {
 .hero-highlights span,
 .service-empty,
 .form-note,
-.material-grid span,
 .contact-box p,
 .service-card p,
 .barber-profile-info p,
@@ -3172,8 +2866,7 @@ body::after {
 
 .hero-frame,
 .hero-photo-frame,
-.studio-photo,
-.subpage-visual {
+.studio-photo {
   border-radius: 8px;
   border: 1px solid rgba(232, 226, 211, 0.18);
   background: #151718;
@@ -3195,36 +2888,18 @@ body::after {
 }
 
 .hero-photo-frame img,
-.studio-photo img,
-.subpage-visual img {
+.studio-photo img {
   filter: saturate(0.78) contrast(1.1) brightness(0.86);
 }
 
-.hero-card {
-  background: rgba(15, 17, 17, 0.88);
-  border-color: rgba(232, 226, 211, 0.18);
-}
 
-.hero-card strong {
-  color: #d6b56e;
-}
 
-.street-strip {
-  gap: 10px;
-  margin: 2px 0 26px;
-}
 
-.street-strip div {
-  min-height: 68px;
-  border: 1px solid rgba(232, 226, 211, 0.13);
-  background:
-    linear-gradient(120deg, rgba(255, 255, 255, 0.08), transparent 38%),
-    linear-gradient(180deg, #2b2f2f, #171a1b);
-  color: #ebe5d8;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 16px 34px rgba(0, 0, 0, 0.28);
-}
 
-.street-strip div::before,
+
+
+
+
 .booking-promo::before {
   opacity: 0.48;
   background:
@@ -3232,9 +2907,7 @@ body::after {
     linear-gradient(112deg, transparent 0 68%, rgba(196, 161, 92, 0.12) 68.2%, transparent 68.8%);
 }
 
-.street-strip span {
-  color: var(--amber);
-}
+
 
 .section {
   border-top-color: rgba(232, 226, 211, 0.09);
@@ -3516,10 +3189,10 @@ body::after {
   }
 
   .hero-highlights div,
-  .booking-card,
-  .contact-box,
-  .barber-profile-card,
-  .service-card {
+.booking-card,
+.contact-box,
+.barber-profile-card,
+.service-card {
     box-shadow: 0 14px 32px rgba(0, 0, 0, 0.3);
   }
 
@@ -3543,9 +3216,8 @@ body::after {
   }
 
   .hero-image,
-  .hero-photo-frame,
-  .studio-photo,
-  .subpage-visual {
+.hero-photo-frame,
+.studio-photo {
     min-height: 310px;
   }
 
@@ -3555,8 +3227,7 @@ body::after {
 }
 
 /* Concrete palette refinement */
-:root,
-body.light-theme {
+:root {
   color-scheme: light;
   --bg-color: #e0e0e0;
   --surface: rgba(47, 47, 47, 0.94);
@@ -3582,8 +3253,7 @@ html {
   background: #e0e0e0;
 }
 
-body,
-body.light-theme {
+body {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.62), transparent 24rem),
     linear-gradient(115deg, transparent 0 20%, rgba(0, 0, 0, 0.045) 20.1% 20.25%, transparent 20.35%),
@@ -3634,8 +3304,7 @@ body::after {
 .hero-copy .eyebrow,
 .section-heading .eyebrow,
 .dashboard-title-block .eyebrow,
-.booking-promo .eyebrow,
-.street-strip span {
+.booking-promo .eyebrow {
   color: #000000;
 }
 
@@ -3696,8 +3365,7 @@ body::after {
 .booking-calendar-panel,
 .modal-panel,
 .dashboard-panel,
-.dashboard-header-sticky,
-.pull-panel {
+.dashboard-header-sticky {
   border-color: rgba(0, 0, 0, 0.16);
   background:
     linear-gradient(145deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.018) 42%),
@@ -3722,7 +3390,6 @@ body::after {
 .hero-highlights span,
 .service-empty,
 .form-note,
-.material-grid span,
 .contact-box p,
 .service-card p,
 .barber-profile-info p,
@@ -3734,8 +3401,7 @@ body::after {
 
 .hero-frame,
 .hero-photo-frame,
-.studio-photo,
-.subpage-visual {
+.studio-photo {
   border-color: rgba(0, 0, 0, 0.18);
   background: #525252;
   box-shadow: 0 28px 62px rgba(0, 0, 0, 0.22);
@@ -3743,7 +3409,6 @@ body::after {
 
 .hero-photo-frame img,
 .studio-photo img,
-.subpage-visual img,
 .gallery-image,
 .barber-profile-images img,
 .editable-photo-card img {
@@ -3762,15 +3427,8 @@ body::after {
     linear-gradient(180deg, transparent, rgba(255, 255, 255, 0.08));
 }
 
-.street-strip div {
-  border-color: rgba(0, 0, 0, 0.16);
-  background:
-    linear-gradient(120deg, rgba(255, 255, 255, 0.12), transparent 38%),
-    linear-gradient(180deg, #3a3a3a, #525252);
-  color: #ffffff;
-}
 
-.street-strip div::before,
+
 .booking-promo::before {
   background:
     repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.08) 0 1px, transparent 1px 44px),
@@ -4190,7 +3848,7 @@ body::after {
 
 @media (max-width: 760px) {
   .calendar-day,
-  #booking-calendar .calendar-day {
+#booking-calendar .calendar-day {
     min-height: 72px;
     padding: 7px;
   }
@@ -4202,7 +3860,7 @@ body::after {
   }
 
   .calendar-day-indicator,
-  .calendar-day-count {
+.calendar-day-count {
     min-height: 20px;
     padding: 4px 5px;
     font-size: 0.58rem;
@@ -4215,13 +3873,13 @@ body::after {
   }
 
   .calendar-day,
-  #booking-calendar .calendar-day {
+#booking-calendar .calendar-day {
     min-height: 58px;
     padding: 5px;
   }
 
   .appointment-indicator,
-  .calendar-day-count {
+.calendar-day-count {
     display: none;
   }
 }
@@ -4232,13 +3890,10 @@ body::after {
 .hero-photo-frame::before,
 .hero-photo-frame::after,
 .studio-photo::after,
-.subpage-visual::after,
-.street-strip div::before,
 .booking-promo::before {
   display: none;
 }
 
-.street-strip div,
 .booking-promo {
   background: linear-gradient(180deg, #3a3a3a, #525252);
 }
@@ -4292,8 +3947,7 @@ img {
 }
   
 /* Luxury minimal refresh - warm brown / soft gray */
-:root,
-body.light-theme {
+:root {
   color-scheme: light;
   --bg-color: #eeebe5;
   --surface: rgba(248, 246, 241, 0.94);
@@ -4320,8 +3974,7 @@ html {
   background: #eeebe5;
 }
 
-body,
-body.light-theme {
+body {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.72) 0, rgba(255, 255, 255, 0) 360px),
     linear-gradient(90deg, rgba(47, 39, 31, 0.045) 1px, transparent 1px),
@@ -4437,8 +4090,7 @@ body::after {
 .hero-copy .eyebrow,
 .section-heading .eyebrow,
 .dashboard-title-block .eyebrow,
-.booking-promo .eyebrow,
-.street-strip span {
+.booking-promo .eyebrow {
   color: #8a6541;
   font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Consolas, monospace;
   font-size: 0.76rem;
@@ -4489,7 +4141,6 @@ body::after {
 .modal-panel,
 .dashboard-panel,
 .dashboard-header-sticky,
-.pull-panel,
 .calendar-card,
 .booking-window-calendar {
   border: 1px solid rgba(43, 37, 30, 0.12);
@@ -4519,29 +4170,25 @@ body::after {
 .hero-highlights span,
 .service-empty,
 .form-note,
-.material-grid span,
 .contact-box p,
 .service-card p,
 .barber-profile-info p,
 .dayoff-item p,
 .staff-card span,
 .slot-message,
-.service-card-duration,
-.booking-service-option small {
+.service-card-duration {
   color: #6f675d;
 }
 
 .hero-image,
 .hero-photo-frame,
-.studio-photo,
-.subpage-visual {
+.studio-photo {
   min-height: 610px;
 }
 
 .hero-frame,
 .hero-photo-frame,
-.studio-photo,
-.subpage-visual {
+.studio-photo {
   border: 1px solid rgba(43, 37, 30, 0.14);
   background: #d8d1c6;
   box-shadow: 0 34px 86px rgba(36, 30, 24, 0.18);
@@ -4549,7 +4196,6 @@ body::after {
 
 .hero-photo-frame img,
 .studio-photo img,
-.subpage-visual img,
 .gallery-image,
 .barber-profile-images img,
 .editable-photo-card img,
@@ -4557,7 +4203,6 @@ body::after {
   filter: grayscale(0.08) saturate(0.74) contrast(1.04) brightness(0.98);
 }
 
-.street-strip div,
 .booking-promo {
   border: 1px solid rgba(43, 37, 30, 0.13);
   background: #2b211b;
@@ -4565,7 +4210,6 @@ body::after {
   color: #fffaf1;
 }
 
-.street-strip span,
 .booking-promo .eyebrow,
 .booking-promo h2 {
   color: #fffaf1;
@@ -4779,9 +4423,8 @@ body::after {
   }
 
   .hero-image,
-  .hero-photo-frame,
-  .studio-photo,
-  .subpage-visual {
+.hero-photo-frame,
+.studio-photo {
     min-height: 480px;
   }
 }
@@ -4799,12 +4442,12 @@ body::after {
   }
 
   .site-nav,
-  .header-actions {
+.header-actions {
     width: 100%;
   }
 
   .site-nav a,
-  .header-actions .btn {
+.header-actions .btn {
     flex: 1 1 auto;
   }
 
@@ -4813,26 +4456,24 @@ body::after {
   }
 
   .section-heading h2,
-  .booking-promo h2,
-  .dashboard-title-block h2 {
+.booking-promo h2,
+.dashboard-title-block h2 {
     font-size: 2.2rem;
   }
 
   .hero-highlights,
-  .about-grid,
-  .service-grid,
-  .contact-grid,
-  .form-row {
+.contact-grid,
+.form-row {
     grid-template-columns: 1fr;
   }
 
   .booking-card,
-  .contact-box,
-  .location-map,
-  .dayoff-form-container,
-  .dayoff-calendar-container,
-  .barber-profile-card,
-  .service-card {
+.contact-box,
+.location-map,
+.dayoff-form-container,
+.dayoff-calendar-container,
+.barber-profile-card,
+.service-card {
     padding: 20px;
   }
 }
@@ -4851,9 +4492,8 @@ body::after {
   }
 
   .hero-image,
-  .hero-photo-frame,
-  .studio-photo,
-  .subpage-visual {
+.hero-photo-frame,
+.studio-photo {
     min-height: 330px;
   }
 }
