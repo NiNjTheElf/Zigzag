@@ -10,6 +10,8 @@ const state = {
   serviceList: [],
   availabilityTimes: [],
   blockedPhones: [],
+  phoneStats: [],
+  reviews: [],
   currentApptMonth: new Date(),
   currentDayoffMonth: new Date(),
   selectedApptDate: null,
@@ -56,6 +58,8 @@ const elements = {
   blockedPhoneNumber: document.getElementById('blocked-phone-number'),
   blockedPhoneReason: document.getElementById('blocked-phone-reason'),
   blockedPhoneList: document.getElementById('blocked-phone-list'),
+  phoneStatsList: document.getElementById('phone-stats-list'),
+  staffReviewsList: document.getElementById('staff-reviews-list'),
   createBarberForm: document.getElementById('create-barber-form'),
   newBarberName: document.getElementById('new-barber-name'),
   newBarberEmail: document.getElementById('new-barber-email'),
@@ -89,6 +93,12 @@ function renderDashboardLoadingState() {
   }
   if (elements.blockedPhoneList) {
     elements.blockedPhoneList.innerHTML = '<p class="form-note">Loading blocked numbers...</p>';
+  }
+  if (elements.phoneStatsList) {
+    elements.phoneStatsList.innerHTML = '<p class="form-note">Loading phone history...</p>';
+  }
+  if (elements.staffReviewsList) {
+    elements.staffReviewsList.innerHTML = '<p class="form-note">Loading reviews...</p>';
   }
 }
 
@@ -686,6 +696,23 @@ async function fetchBlockedPhones() {
   return state.blockedPhones;
 }
 
+async function fetchPhoneStats() {
+  const data = await apiCall('/phone-number-stats', { method: 'GET' });
+  state.phoneStats = data || [];
+  return state.phoneStats;
+}
+
+async function fetchReviews() {
+  const params = new URLSearchParams();
+  if (state.user && state.user.role !== 'BOSS' && state.user.role !== 'SENIOR_BARBER') {
+    params.set('barberId', state.user.id);
+  }
+  const suffix = params.toString() ? `?${params.toString()}` : '';
+  const data = await apiCall(`/reviews${suffix}`, { method: 'GET' });
+  state.reviews = data || [];
+  return state.reviews;
+}
+
 async function fetchDayOffs() {
   const data = await apiCall('/dayoffs', { method: 'GET' });
   // Regular barbers only see their own day-offs. Boss/senior see the full shop.
@@ -921,6 +948,7 @@ function showDayAppointments(dateKey, appointments) {
           await apiCall(`/appointments/${apptId}`, { method: 'DELETE' });
           showToast('Appointment cancelled.');
           await refreshAppointments();
+          await refreshPhoneStats();
           renderAppointmentsCalendar();
         } catch (error) {
           showToast('Failed to cancel: ' + error.message);
@@ -1250,6 +1278,101 @@ function renderBlockedPhones() {
   });
 }
 
+function renderPhoneStats() {
+  if (!elements.phoneStatsList) return;
+  elements.phoneStatsList.innerHTML = '';
+
+  if (!state.phoneStats.length) {
+    elements.phoneStatsList.innerHTML = '<p>No phone number history yet.</p>';
+    return;
+  }
+
+  state.phoneStats.forEach(record => {
+    const item = document.createElement('div');
+    item.className = 'dayoff-item';
+
+    const info = document.createElement('div');
+    info.className = 'dayoff-item-info';
+
+    const phone = document.createElement('strong');
+    phone.textContent = record.phone_number;
+
+    const completed = document.createElement('p');
+    completed.innerHTML = `<strong>Completed:</strong> ${record.completed_appointments_count || 0}`;
+
+    const canceled = document.createElement('p');
+    canceled.innerHTML = `<strong>Canceled:</strong> ${record.canceled_appointments_count || 0}`;
+
+    info.appendChild(phone);
+    info.appendChild(completed);
+    info.appendChild(canceled);
+    item.appendChild(info);
+    elements.phoneStatsList.appendChild(item);
+  });
+}
+
+function renderStaffReviews() {
+  if (!elements.staffReviewsList) return;
+  elements.staffReviewsList.innerHTML = '';
+
+  if (!state.reviews.length) {
+    elements.staffReviewsList.innerHTML = '<p>No reviews yet.</p>';
+    return;
+  }
+
+  state.reviews.forEach(review => {
+    const barber = state.barbers.find(item => item.id === review.barber_id);
+    const item = document.createElement('div');
+    item.className = 'dayoff-item';
+
+    const info = document.createElement('div');
+    info.className = 'dayoff-item-info';
+
+    const title = document.createElement('strong');
+    title.textContent = `${'★'.repeat(review.rating)}${'☆'.repeat(5 - review.rating)} ${review.client_name || 'Client'}`;
+    info.appendChild(title);
+
+    if (review.comment) {
+      const comment = document.createElement('p');
+      comment.textContent = review.comment;
+      info.appendChild(comment);
+    }
+
+    if (barber && state.user?.role === 'BOSS') {
+      const barberLabel = document.createElement('p');
+      barberLabel.innerHTML = `<strong>Barber:</strong> ${barber.name}`;
+      info.appendChild(barberLabel);
+    }
+
+    const date = document.createElement('p');
+    date.textContent = review.created_at ? new Date(review.created_at).toLocaleDateString() : '';
+    info.appendChild(date);
+
+    const deleteButton = document.createElement('button');
+    deleteButton.className = 'dayoff-item-delete delete-review';
+    deleteButton.type = 'button';
+    deleteButton.dataset.id = review.id;
+    deleteButton.textContent = 'Delete';
+
+    item.appendChild(info);
+    item.appendChild(deleteButton);
+    elements.staffReviewsList.appendChild(item);
+  });
+
+  elements.staffReviewsList.querySelectorAll('.delete-review').forEach(button => {
+    button.addEventListener('click', async () => {
+      if (!confirm('Delete this review?')) return;
+      try {
+        await apiCall(`/reviews/${button.dataset.id}`, { method: 'DELETE' });
+        showToast('Review deleted.');
+        await refreshReviews();
+      } catch (error) {
+        showToast('Could not delete review: ' + error.message);
+      }
+    });
+  });
+}
+
 function renderWorkPhotoFilePreview() {
   renderFilePreview(elements.workPhotoFiles, elements.workPhotoPreview, 'Choose work photos to preview.');
 }
@@ -1454,6 +1577,16 @@ async function refreshBlockedPhones() {
   renderBlockedPhones();
 }
 
+async function refreshPhoneStats() {
+  await fetchPhoneStats();
+  renderPhoneStats();
+}
+
+async function refreshReviews() {
+  await fetchReviews();
+  renderStaffReviews();
+}
+
 async function refreshAll() {
   if (state.token) {
     await fetchCurrentUser();
@@ -1481,12 +1614,16 @@ async function refreshAll() {
     refreshAvailability(),
     refreshBlockedPhones(),
     refreshAppointments(),
+    refreshPhoneStats(),
+    refreshReviews(),
   ]);
   const failed = results.find(result => result.status === 'rejected');
   if (failed) {
     console.warn('Some dashboard data failed to load:', failed.reason);
     showToast('Some dashboard data is still loading or unavailable.');
   }
+  renderPhoneStats();
+  renderStaffReviews();
   renderProfileForm();
 }
 

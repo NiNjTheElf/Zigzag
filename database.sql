@@ -39,7 +39,18 @@ ON "appointments" ("barber_id", "appointment_date");
 CREATE INDEX IF NOT EXISTS "appointments_client_phone_idx"
 ON "appointments" ("client_phone");
 
--- 4. Create pending booking confirmations for phone-code verification
+-- 4. Track phone number appointment outcomes after old appointments are purged
+CREATE TABLE IF NOT EXISTS "phone_number_stats" (
+    "id" SERIAL PRIMARY KEY,
+    "phone_number" TEXT UNIQUE NOT NULL,
+    "completed_appointments_count" INTEGER NOT NULL DEFAULT 0,
+    "canceled_appointments_count" INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS "phone_number_stats_phone_number_idx"
+ON "phone_number_stats" ("phone_number");
+
+-- 5. Create pending booking confirmations for phone-code verification
 CREATE TABLE IF NOT EXISTS "booking_confirmations" (
     "id" SERIAL PRIMARY KEY,
     "confirmation_token" TEXT UNIQUE NOT NULL,
@@ -67,7 +78,7 @@ CREATE INDEX IF NOT EXISTS "booking_confirmations_pending_phone_idx"
 ON "booking_confirmations" ("client_phone", "created_at")
 WHERE "status" = 'pending';
 
--- 5. Create the Day Offs table
+-- 6. Create the Day Offs table
 CREATE TABLE IF NOT EXISTS "day_offs" (
     "id" SERIAL PRIMARY KEY,
     "barber_id" INTEGER REFERENCES "users"("id") ON DELETE SET NULL,
@@ -81,7 +92,7 @@ CREATE TABLE IF NOT EXISTS "day_offs" (
 CREATE INDEX IF NOT EXISTS "day_offs_barber_date_idx"
 ON "day_offs" ("barber_id", "day_off_date");
 
--- 6. Create custom barber availability times
+-- 7. Create custom barber availability times
 CREATE TABLE IF NOT EXISTS "barber_available_times" (
     "id" SERIAL PRIMARY KEY,
     "barber_id" INTEGER NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
@@ -94,7 +105,7 @@ CREATE TABLE IF NOT EXISTS "barber_available_times" (
 CREATE INDEX IF NOT EXISTS "barber_available_times_barber_sort_idx"
 ON "barber_available_times" ("barber_id", "sort_minutes");
 
--- 7. Create blocked phone numbers per barber
+-- 8. Create blocked phone numbers per barber
 CREATE TABLE IF NOT EXISTS "blocked_phone_numbers" (
     "id" SERIAL PRIMARY KEY,
     "barber_id" INTEGER NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
@@ -114,7 +125,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS "blocked_phone_numbers_one_active_idx"
 ON "blocked_phone_numbers" ("barber_id", "phone_number")
 WHERE "is_active" = true;
 
--- 8. Create the Reviews table
+-- 9. Create the Reviews table
 CREATE TABLE IF NOT EXISTS "reviews" (
     "id" SERIAL PRIMARY KEY,
     "barber_id" INTEGER NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
@@ -128,7 +139,7 @@ CREATE TABLE IF NOT EXISTS "reviews" (
     "created_at" TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 9. Insert default users
+-- 10. Insert default users
 INSERT INTO "users" ("name", "email", "password", "role") VALUES
   ('ZigZag Boss', 'boss@zigzag.com', '$2a$10$ZQIPoLW9k43OdCYADIN3L.FPO8eMClEevulVoSlG19QYDSqU9FLL.', 'BOSS'),
   ('Alex Mercer', 'alex@zigzag.com', '$2a$10$peowVLs8e7k42yYXuBtPwOFnWy.PYQotK5kzYQLJtB10UJQuzFP4m', 'BARBER'),

@@ -29,7 +29,7 @@ app.use(express.static('./'));
 app.use('/uploads', express.static(uploadsDir));
 
 app.get('/api/health', async (req, res) => {
-  const configuredTables = ['users', 'appointments', 'day_offs', 'reviews', 'booking_confirmations', 'barber_available_times'];
+  const configuredTables = ['users', 'appointments', 'day_offs', 'reviews', 'booking_confirmations', 'barber_available_times', 'phone_number_stats'];
   try {
     const dbNow = await pool.query('SELECT NOW() AS now');
     const tables = await pool.query(
@@ -116,6 +116,14 @@ const FIREBASE_WEB_API_KEY = process.env.FIREBASE_WEB_API_KEY || process.env.FIR
 async function ensureRuntimeSchema() {
   await pool.query('ALTER TABLE "appointments" ADD COLUMN IF NOT EXISTS "duration_minutes" INTEGER NOT NULL DEFAULT 60');
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS "phone_number_stats" (
+      "id" SERIAL PRIMARY KEY,
+      "phone_number" TEXT UNIQUE NOT NULL,
+      "completed_appointments_count" INTEGER NOT NULL DEFAULT 0,
+      "canceled_appointments_count" INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS "booking_confirmations" (
       "id" SERIAL PRIMARY KEY,
       "confirmation_token" TEXT UNIQUE NOT NULL,
@@ -160,6 +168,7 @@ async function ensureRuntimeSchema() {
   `);
   await pool.query('CREATE INDEX IF NOT EXISTS "appointments_barber_date_idx" ON "appointments" ("barber_id", "appointment_date")');
   await pool.query('CREATE INDEX IF NOT EXISTS "appointments_client_phone_idx" ON "appointments" ("client_phone")');
+  await pool.query('CREATE UNIQUE INDEX IF NOT EXISTS "phone_number_stats_phone_number_idx" ON "phone_number_stats" ("phone_number")');
   await pool.query('CREATE INDEX IF NOT EXISTS "day_offs_barber_date_idx" ON "day_offs" ("barber_id", "day_off_date")');
   await pool.query('CREATE INDEX IF NOT EXISTS "barber_available_times_barber_sort_idx" ON "barber_available_times" ("barber_id", "sort_minutes")');
   await pool.query('CREATE INDEX IF NOT EXISTS "blocked_phone_numbers_barber_active_idx" ON "blocked_phone_numbers" ("barber_id", "is_active", "phone_number")');
@@ -180,9 +189,58 @@ async function ensureRuntimeSchema() {
   `);
 }
 
-ensureRuntimeSchema().catch(error => {
-  console.error('Failed to prepare database schema', error);
-});
+async function addPhoneNumberStats(phoneNumber, completedDelta = 0, canceledDelta = 0, db = pool) {
+  const normalizedPhone = normalizePhoneForComparison(phoneNumber);
+  if (!hasUsablePhoneNumber(normalizedPhone)) return;
+
+  await db.query(
+    `INSERT INTO "phone_number_stats" ("phone_number", "completed_appointments_count", "canceled_appointments_count")
+     VALUES ($1, $2, $3)
+     ON CONFLICT ("phone_number")
+     DO UPDATE SET
+       "completed_appointments_count" = "phone_number_stats"."completed_appointments_count" + EXCLUDED."completed_appointments_count",
+       "canceled_appointments_count" = "phone_number_stats"."canceled_appointments_count" + EXCLUDED."canceled_appointments_count"`,
+    [normalizedPhone, completedDelta, canceledDelta]
+  );
+}
+
+async function purgeOldAppointments(db = pool) {
+  const result = await db.query(`
+    WITH deleted AS (
+      DELETE FROM "appointments"
+      WHERE "appointment_date" < CURRENT_DATE - INTERVAL '7 days'
+      RETURNING "client_phone"
+    ),
+    normalized AS (
+      SELECT regexp_replace(COALESCE("client_phone", ''), '[\\s().-]', '', 'g') AS "phone_number"
+      FROM deleted
+    ),
+    counted AS (
+      SELECT "phone_number", COUNT(*)::integer AS "completed_count"
+      FROM normalized
+      WHERE length(regexp_replace("phone_number", '\\D', '', 'g')) >= 7
+      GROUP BY "phone_number"
+    )
+    INSERT INTO "phone_number_stats" ("phone_number", "completed_appointments_count", "canceled_appointments_count")
+    SELECT "phone_number", "completed_count", 0
+    FROM counted
+    ON CONFLICT ("phone_number")
+    DO UPDATE SET
+      "completed_appointments_count" = "phone_number_stats"."completed_appointments_count" + EXCLUDED."completed_appointments_count"
+    RETURNING "phone_number", "completed_appointments_count"
+  `);
+
+  if (result.rows.length) {
+    console.log(`Purged old appointments for ${result.rows.length} phone number(s).`);
+  }
+  return result.rows;
+}
+
+ensureRuntimeSchema()
+  .then(() => purgeOldAppointments())
+  .catch(error => {
+    console.error('Failed to run startup database maintenance', error);
+  });
 
 // Helper function to normalize user object
 function normalizeUser(dbUser) {
@@ -236,6 +294,15 @@ function parseServiceList(rawServices) {
     });
   });
   return services.length ? services : [{ name: trimmed }];
+}
+
+function normalizePhotoUrlList(photoData) {
+  if (!photoData) return [];
+  if (Array.isArray(photoData)) return photoData.filter(Boolean);
+  if (typeof photoData === 'string') {
+    return photoData.split(',').map(url => url.trim()).filter(Boolean);
+  }
+  return [];
 }
 
 function normalizeDuration(value) {
@@ -664,6 +731,80 @@ async function uploadFileToSupabase(file, objectPath) {
   return getPublicStorageUrl(objectPath);
 }
 
+function getSupabaseObjectPath(fileUrl) {
+  if (!SUPABASE_URL || !fileUrl) return null;
+  try {
+    const parsed = new URL(fileUrl, SUPABASE_URL);
+    const storagePrefix = `/storage/v1/object/public/${encodeURIComponent(SUPABASE_STORAGE_BUCKET)}/`;
+    if (parsed.origin !== new URL(SUPABASE_URL).origin || !parsed.pathname.startsWith(storagePrefix)) {
+      return null;
+    }
+    return decodeURIComponent(parsed.pathname.slice(storagePrefix.length));
+  } catch {
+    return null;
+  }
+}
+
+function getLocalUploadPath(fileUrl) {
+  if (!fileUrl) return null;
+  try {
+    const parsed = new URL(fileUrl, 'http://local.test');
+    if (!parsed.pathname.startsWith('/uploads/')) return null;
+    const filename = path.basename(decodeURIComponent(parsed.pathname.slice('/uploads/'.length)));
+    const resolved = path.resolve(uploadsDir, filename);
+    return resolved.startsWith(path.resolve(uploadsDir) + path.sep) ? resolved : null;
+  } catch {
+    return null;
+  }
+}
+
+async function deleteStoredFile(fileUrl) {
+  const objectPath = getSupabaseObjectPath(fileUrl);
+  if (objectPath && SUPABASE_URL && SUPABASE_KEY) {
+    const response = await fetch(`${SUPABASE_URL}/storage/v1/object/${encodeURIComponent(SUPABASE_STORAGE_BUCKET)}`, {
+      method: 'DELETE',
+      headers: getStorageHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ prefixes: [objectPath] }),
+    });
+    if (!response.ok) {
+      throw new Error(`Supabase delete failed: ${await readSupabaseError(response)}`);
+    }
+    return true;
+  }
+
+  const localPath = getLocalUploadPath(fileUrl);
+  if (localPath) {
+    await fs.promises.unlink(localPath).catch(error => {
+      if (error.code !== 'ENOENT') throw error;
+    });
+    return true;
+  }
+
+  return false;
+}
+
+function getServicePhotoUrls(rawServices) {
+  return parseServiceList(rawServices).map(service => service?.photoUrl).filter(Boolean);
+}
+
+function collectBarberMedia(profilePhotoUrl, photoUrls, services) {
+  return new Set([
+    profilePhotoUrl,
+    ...normalizePhotoUrlList(photoUrls),
+    ...getServicePhotoUrls(services),
+  ].filter(Boolean));
+}
+
+async function deleteUnreferencedMedia(oldMedia, newMedia) {
+  const removed = [...oldMedia].filter(url => !newMedia.has(url));
+  const results = await Promise.allSettled(removed.map(url => deleteStoredFile(url)));
+  results.forEach((result, index) => {
+    if (result.status === 'rejected') {
+      console.error('Failed to delete unused uploaded file:', removed[index], result.reason);
+    }
+  });
+}
+
 // Auth middleware
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
@@ -795,6 +936,7 @@ app.put('/api/barbers/:id', authenticateToken, async (req, res) => {
     }
     const existingBarber = existingResult.rows[0];
     const targetRole = existingBarber.role;
+    const oldMedia = collectBarberMedia(existingBarber.profile_photo_url, existingBarber.photo_urls, existingBarber.services);
 
     if (req.user.id !== barberId && req.user.role !== 'BOSS' && req.user.role !== 'SENIOR_BARBER') {
       return res.status(403).json({ error: 'Only a boss or the barber can update this profile' });
@@ -871,6 +1013,8 @@ app.put('/api/barbers/:id', authenticateToken, async (req, res) => {
     const updateQuery = `UPDATE "users" SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING id, name, email, role, bio, instagram, tiktok, profile_photo_url, photo_urls, services`;
     const updatedResult = await pool.query(updateQuery, values);
     const updatedBarber = normalizeUser(updatedResult.rows[0]);
+    const newMedia = collectBarberMedia(updatedBarber.profile_photo_url, updatedBarber.photo_urls, updatedBarber.services);
+    await deleteUnreferencedMedia(oldMedia, newMedia);
 
     res.json(updatedBarber);
   } catch (error) {
@@ -890,6 +1034,10 @@ app.delete('/api/barbers/:id', authenticateToken, async (req, res) => {
   }
 
   try {
+    const existingResult = await pool.query(
+      'SELECT "profile_photo_url", "photo_urls", "services" FROM "users" WHERE "id" = $1 AND "role" IN ($2, $3)',
+      [barberId, 'BARBER', 'JUNIOR_BARBER']
+    );
     const result = await pool.query(
       'DELETE FROM "users" WHERE id = $1 AND role IN ($2, $3) RETURNING id',
       [barberId, 'BARBER', 'JUNIOR_BARBER']
@@ -897,6 +1045,11 @@ app.delete('/api/barbers/:id', authenticateToken, async (req, res) => {
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Barber not found or cannot fire this user' });
+    }
+
+    if (existingResult.rows[0]) {
+      const media = collectBarberMedia(existingResult.rows[0].profile_photo_url, existingResult.rows[0].photo_urls, existingResult.rows[0].services);
+      await deleteUnreferencedMedia(media, new Set());
     }
 
     res.json({ success: true });
@@ -943,6 +1096,7 @@ const normalizeDayOffRecord = (row) => ({
 app.get('/api/appointments', authenticateToken, async (req, res) => {
   const { date, barberId } = req.query;
   try {
+    await purgeOldAppointments();
     let query = 'SELECT * FROM "appointments"';
     const params = [];
     const conditions = [];
@@ -978,6 +1132,7 @@ app.get('/api/appointments/month/:year/:month', authenticateToken, async (req, r
   const { year, month } = req.params;
   const { barberId } = req.query;
   try {
+    await purgeOldAppointments();
     const startDate = formatDateOnly(new Date(year, month - 1, 1));
     const endDate = formatDateOnly(new Date(year, month, 0));
 
@@ -1352,26 +1507,51 @@ app.delete('/api/appointments/:id', authenticateToken, async (req, res) => {
     return res.status(400).json({ error: 'Invalid appointment ID' });
   }
 
+  const client = await pool.connect();
   try {
-    const appointmentResult = await pool.query('SELECT "barber_id" FROM "appointments" WHERE "id" = $1', [appointmentId]);
+    await client.query('BEGIN');
+    const appointmentResult = await client.query('SELECT "barber_id", "client_phone" FROM "appointments" WHERE "id" = $1 FOR UPDATE', [appointmentId]);
     if (appointmentResult.rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Appointment not found' });
     }
 
     const appointment = appointmentResult.rows[0];
     if (req.user.role !== 'BOSS' && req.user.role !== 'SENIOR_BARBER' && appointment.barber_id !== req.user.id) {
+      await client.query('ROLLBACK');
       return res.status(403).json({ error: 'Access denied to cancel this appointment' });
     }
 
-    const deleteResult = await pool.query('DELETE FROM "appointments" WHERE "id" = $1 RETURNING "id"', [appointmentId]);
+    const deleteResult = await client.query('DELETE FROM "appointments" WHERE "id" = $1 RETURNING "id"', [appointmentId]);
     if (deleteResult.rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Appointment not found' });
     }
 
+    await addPhoneNumberStats(appointment.client_phone, 0, 1, client);
+    await client.query('COMMIT');
     res.json({ success: true });
   } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
     console.error(error);
     res.status(500).json({ error: 'Failed to delete appointment' });
+  } finally {
+    client.release();
+  }
+});
+
+app.get('/api/phone-number-stats', authenticateToken, async (req, res) => {
+  try {
+    await purgeOldAppointments();
+    const result = await pool.query(
+      `SELECT "id", "phone_number", "completed_appointments_count", "canceled_appointments_count"
+       FROM "phone_number_stats"
+       ORDER BY "completed_appointments_count" DESC, "canceled_appointments_count" DESC, "phone_number"`
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to fetch phone number stats' });
   }
 });
 
@@ -1748,6 +1928,20 @@ app.delete('/api/dayoffs/:id', authenticateToken, async (req, res) => {
 app.get('/api/reviews', async (req, res) => {
   const { barberId } = req.query;
   try {
+    let requestingUser = null;
+    if (!barberId) {
+      const authHeader = req.headers.authorization || '';
+      const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+      if (!token) {
+        return res.status(401).json({ error: 'Access token required' });
+      }
+      try {
+        requestingUser = jwt.verify(token, JWT_SECRET);
+      } catch {
+        return res.status(403).json({ error: 'Invalid token' });
+      }
+    }
+
     let query = `SELECT
         id,
         barber_id,
@@ -1762,6 +1956,9 @@ app.get('/api/reviews', async (req, res) => {
     if (barberId) {
       query += ' WHERE barber_id = $1';
       params.push(parseInt(barberId));
+    } else if (requestingUser && requestingUser.role !== 'BOSS' && requestingUser.role !== 'SENIOR_BARBER') {
+      query += ' WHERE barber_id = $1';
+      params.push(requestingUser.id);
     }
 
     query += ' ORDER BY created_at DESC';
@@ -1831,6 +2028,31 @@ app.post('/api/reviews', requireRecaptchaEnterprise('SUBMIT_REVIEW'), async (req
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to create review' });
+  }
+});
+
+app.delete('/api/reviews/:id', authenticateToken, async (req, res) => {
+  const reviewId = parseInt(req.params.id, 10);
+  if (isNaN(reviewId)) {
+    return res.status(400).json({ error: 'Invalid review ID' });
+  }
+
+  try {
+    const reviewResult = await pool.query('SELECT "id", "barber_id" FROM "reviews" WHERE "id" = $1', [reviewId]);
+    if (reviewResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Review not found' });
+    }
+
+    const review = reviewResult.rows[0];
+    if (req.user.role !== 'BOSS' && req.user.role !== 'SENIOR_BARBER' && review.barber_id !== req.user.id) {
+      return res.status(403).json({ error: 'Access denied to delete this review' });
+    }
+
+    await pool.query('DELETE FROM "reviews" WHERE "id" = $1', [reviewId]);
+    res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to delete review' });
   }
 });
 
