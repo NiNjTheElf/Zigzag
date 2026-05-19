@@ -236,8 +236,25 @@ async function purgeOldAppointments(db = pool) {
   return result.rows;
 }
 
+async function syncAppointmentPhoneStats(db = pool) {
+  await db.query(`
+    WITH normalized AS (
+      SELECT DISTINCT regexp_replace(COALESCE("client_phone", ''), '[\\s().-]', '', 'g') AS "phone_number"
+      FROM "appointments"
+    )
+    INSERT INTO "phone_number_stats" ("phone_number", "completed_appointments_count", "canceled_appointments_count")
+    SELECT "phone_number", 0, 0
+    FROM normalized
+    WHERE length(regexp_replace("phone_number", '\\D', '', 'g')) >= 7
+    ON CONFLICT ("phone_number") DO NOTHING
+  `);
+}
+
 ensureRuntimeSchema()
-  .then(() => purgeOldAppointments())
+  .then(async () => {
+    await purgeOldAppointments();
+    await syncAppointmentPhoneStats();
+  })
   .catch(error => {
     console.error('Failed to run startup database maintenance', error);
   });
@@ -1344,6 +1361,7 @@ app.post('/api/booking-confirmations/confirm', async (req, res) => {
       'UPDATE "booking_confirmations" SET "status" = $1, "confirmed_at" = NOW(), "appointment_id" = $2 WHERE "id" = $3',
       ['confirmed', appointmentResult.rows[0].id, confirmation.id]
     );
+    await addPhoneNumberStats(confirmation.client_phone, 0, 0, client);
     await client.query('COMMIT');
 
     res.status(201).json(appointmentResult.rows[0]);
@@ -1390,6 +1408,7 @@ app.post('/api/appointments', requireRecaptchaEnterprise('BOOK_APPOINTMENT'), re
       'INSERT INTO "appointments" ("barber_id", "client_name", "client_phone", "appointment_date", "appointment_time", "service_type", "duration_minutes") VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
       [parsedBarberId, clientName, normalizedClientPhone, date, time, serviceType || 'Haircut', duration]
     );
+    await addPhoneNumberStats(normalizedClientPhone);
 
     console.log('Appointment booked:', result.rows[0]);
 
@@ -1543,6 +1562,7 @@ app.delete('/api/appointments/:id', authenticateToken, async (req, res) => {
 app.get('/api/phone-number-stats', authenticateToken, async (req, res) => {
   try {
     await purgeOldAppointments();
+    await syncAppointmentPhoneStats();
     const result = await pool.query(
       `SELECT "id", "phone_number", "completed_appointments_count", "canceled_appointments_count"
        FROM "phone_number_stats"
