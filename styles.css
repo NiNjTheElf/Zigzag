@@ -3948,38 +3948,40 @@ img {
   
 /* Luxury minimal refresh - warm brown / soft gray */
 :root {
-  color-scheme: light;
-  --bg-color: #eeebe5;
-  --surface: rgba(248, 246, 241, 0.94);
-  --surface-strong: #fffdf8;
-  --surface-soft: #e2ddd3;
-  --text-main: #181714;
-  --text-muted: #635d54;
-  --text-faint: #90877c;
-  --line: rgba(43, 37, 30, 0.12);
-  --line-strong: rgba(43, 37, 30, 0.24);
-  --concrete: #77716a;
-  --asphalt: #2f302c;
-  --rust: #6b4a32;
-  --rust-dark: #2b211b;
-  --amber: #9b7449;
-  --blue-grey: #657a7b;
-  --moss: #6f7a66;
-  --danger: #9c3f34;
-  --shadow: 0 28px 70px rgba(36, 30, 24, 0.13);
+  color-scheme: dark;
+  --bg-color: #100f0d;
+  --surface: rgba(22, 19, 16, 0.9);
+  --surface-strong: rgba(30, 26, 22, 0.96);
+  --surface-soft: rgba(255, 255, 255, 0.06);
+  --text-main: #f2ece2;
+  --text-muted: rgba(242, 236, 226, 0.72);
+  --text-faint: rgba(242, 236, 226, 0.52);
+  --line: rgba(242, 236, 226, 0.12);
+  --line-strong: rgba(242, 236, 226, 0.22);
+  --concrete: rgba(242, 236, 226, 0.64);
+  --asphalt: #141210;
+  --rust: #b07a54;
+  --rust-dark: #3a261c;
+  --amber: #d0a06a;
+  --blue-grey: #8ea8aa;
+  --moss: #92a28a;
+  --danger: #e0786d;
+  --shadow: 0 28px 70px rgba(0, 0, 0, 0.45);
   font-family: 'IBM Plex Sans Condensed', 'Segoe UI', system-ui, -apple-system, sans-serif;
 }
 
 html {
-  background: #eeebe5;
+  background: var(--bg-color);
 }
 
 body {
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.72) 0, rgba(255, 255, 255, 0) 360px),
-    linear-gradient(90deg, rgba(47, 39, 31, 0.045) 1px, transparent 1px),
-    #eeebe5;
-  background-size: auto, 112px 112px, auto;
+    radial-gradient(circle at 14% 10%, rgba(176, 122, 84, 0.16), transparent 34rem),
+    radial-gradient(circle at 86% 8%, rgba(142, 168, 170, 0.12), transparent 30rem),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0, rgba(255, 255, 255, 0) 360px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    var(--bg-color);
+  background-size: auto, auto, auto, 112px 112px, auto;
   color: var(--text-main);
   font-family: 'IBM Plex Sans Condensed', 'Segoe UI', system-ui, -apple-system, sans-serif;
 }
@@ -4000,15 +4002,15 @@ body::after {
   z-index: 12;
   margin-top: 14px;
   padding: 12px 14px 12px 20px;
-  border: 1px solid rgba(35, 30, 25, 0.12);
+  border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(248, 246, 241, 0.9);
-  box-shadow: 0 16px 42px rgba(34, 29, 24, 0.1);
+  background: rgba(22, 19, 16, 0.82);
+  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.36);
   backdrop-filter: blur(18px);
 }
 
 .brand {
-  color: #171512;
+  color: var(--text-main);
   font-family: 'Russo One', 'Arial Black', system-ui, sans-serif;
   font-size: 1.08rem;
   font-weight: 400;
@@ -4021,15 +4023,15 @@ body::after {
 
 .site-nav a {
   border-radius: 8px;
-  color: #6f675d;
+  color: var(--text-muted);
   font-size: 0.96rem;
   font-weight: 700;
   padding: 9px 12px;
 }
 
 .site-nav a:hover {
-  background: rgba(107, 74, 50, 0.08);
-  color: #201b16;
+  background: rgba(176, 122, 84, 0.16);
+  color: var(--text-main);
 }
 
 .btn,
@@ -4040,10 +4042,10 @@ body::after {
 .photo-remove-btn,
 .close-btn {
   border-radius: 8px;
-  border-color: rgba(35, 30, 25, 0.16);
-  background: #f8f6f1;
+  border-color: var(--line);
+  background: var(--surface-strong);
   box-shadow: none;
-  color: #201b16;
+  color: var(--text-main);
   font-weight: 800;
   letter-spacing: 0;
 }
@@ -4051,9 +4053,9 @@ body::after {
 .btn:hover,
 .tab-button:hover,
 .slot-grid button:hover {
-  border-color: rgba(107, 74, 50, 0.42);
-  background: #fffdf8;
-  color: #171512;
+  border-color: rgba(208, 160, 106, 0.55);
+  background: rgba(38, 32, 27, 0.96);
+  color: var(--text-main);
   transform: translateY(-1px);
 }
 
@@ -4061,23 +4063,27 @@ body::after {
 .booking-service-option.selected,
 .slot-grid button.selected,
 .tab-button.active {
-  border-color: #2b211b;
-  background: #2b211b;
-  color: #fffaf1;
-  box-shadow: 0 14px 34px rgba(43, 33, 27, 0.2);
+  border-color: rgba(208, 160, 106, 0.68);
+  background:
+    linear-gradient(180deg, rgba(208, 160, 106, 0.26), rgba(208, 160, 106, 0.12)),
+    rgba(30, 26, 22, 0.96);
+  color: var(--text-main);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.32);
 }
 
 .btn-primary:hover {
-  background: #6b4a32;
-  border-color: #6b4a32;
-  color: #fffaf1;
+  background:
+    linear-gradient(180deg, rgba(208, 160, 106, 0.34), rgba(208, 160, 106, 0.14)),
+    rgba(34, 30, 25, 0.98);
+  border-color: rgba(208, 160, 106, 0.82);
+  color: var(--text-main);
 }
 
 .btn-secondary,
 .btn-black {
-  border-color: rgba(35, 30, 25, 0.16);
-  background: rgba(255, 255, 255, 0.52);
-  color: #211d18;
+  border-color: var(--line);
+  background: rgba(30, 26, 22, 0.68);
+  color: var(--text-main);
 }
 
 .hero-section {
@@ -4091,7 +4097,7 @@ body::after {
 .section-heading .eyebrow,
 .dashboard-title-block .eyebrow,
 .booking-promo .eyebrow {
-  color: #8a6541;
+  color: var(--amber);
   font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Consolas, monospace;
   font-size: 0.76rem;
   font-weight: 700;
@@ -4099,7 +4105,7 @@ body::after {
 }
 
 .hero-copy h1 {
-  color: #171512;
+  color: var(--text-main);
   font-family: 'Russo One', 'Arial Black', system-ui, sans-serif;
   font-size: 5.9rem;
   font-weight: 400;
@@ -4111,7 +4117,7 @@ body::after {
 .section-heading h2,
 .booking-promo h2,
 .dashboard-title-block h2 {
-  color: #171512;
+  color: var(--text-main);
   font-size: 3rem;
   font-weight: 700;
   line-height: 1;
@@ -4119,7 +4125,7 @@ body::after {
 }
 
 .hero-copy p {
-  color: #625a51;
+  color: var(--text-muted);
   font-size: 1.16rem;
   max-width: 520px;
 }
@@ -4143,9 +4149,9 @@ body::after {
 .dashboard-header-sticky,
 .calendar-card,
 .booking-window-calendar {
-  border: 1px solid rgba(43, 37, 30, 0.12);
-  background: rgba(248, 246, 241, 0.92);
-  box-shadow: 0 24px 58px rgba(36, 30, 24, 0.1);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: var(--shadow);
 }
 
 .hero-highlights div {
@@ -4154,7 +4160,7 @@ body::after {
 }
 
 .hero-highlights div::before {
-  background: #9b7449;
+  background: var(--amber);
 }
 
 .hero-highlights strong,
@@ -4164,7 +4170,7 @@ body::after {
 .service-card h3,
 .barber-profile-info strong,
 .dashboard-title-block h2 {
-  color: #171512;
+  color: var(--text-main);
 }
 
 .hero-highlights span,
@@ -4177,7 +4183,7 @@ body::after {
 .staff-card span,
 .slot-message,
 .service-card-duration {
-  color: #6f675d;
+  color: var(--text-muted);
 }
 
 .hero-image,
@@ -4189,9 +4195,9 @@ body::after {
 .hero-frame,
 .hero-photo-frame,
 .studio-photo {
-  border: 1px solid rgba(43, 37, 30, 0.14);
-  background: #d8d1c6;
-  box-shadow: 0 34px 86px rgba(36, 30, 24, 0.18);
+  border: 1px solid var(--line-strong);
+  background: rgba(26, 23, 20, 0.92);
+  box-shadow: 0 34px 86px rgba(0, 0, 0, 0.52);
 }
 
 .hero-photo-frame img,
@@ -4200,7 +4206,7 @@ body::after {
 .barber-profile-images img,
 .editable-photo-card img,
 .cube-tile {
-  filter: grayscale(0.08) saturate(0.74) contrast(1.04) brightness(0.98);
+  filter: grayscale(0.06) saturate(0.78) contrast(1.06) brightness(1.02);
 }
 
 .booking-promo {
@@ -4216,7 +4222,7 @@ body::after {
 }
 
 .section {
-  border-top-color: rgba(43, 37, 30, 0.1);
+  border-top-color: var(--line);
   padding: 68px 0;
 }
 
@@ -4231,7 +4237,7 @@ body::after {
 }
 
 .form-group label {
-  color: #4e473f;
+  color: var(--text-muted);
   font-size: 0.94rem;
 }
 
@@ -4239,17 +4245,17 @@ body::after {
 .form-group select,
 .form-group textarea,
 .booking-native-date {
-  border: 1px solid rgba(43, 37, 30, 0.14);
-  background: #fffdf8;
-  color: #171512;
+  border: 1px solid var(--line);
+  background: var(--surface-strong);
+  color: var(--text-main);
 }
 
 .form-group input:focus,
 .form-group select:focus,
 .form-group textarea:focus {
-  border-color: rgba(107, 74, 50, 0.68);
-  background: #ffffff;
-  box-shadow: 0 0 0 3px rgba(107, 74, 50, 0.14);
+  border-color: rgba(208, 160, 106, 0.78);
+  background: rgba(38, 32, 27, 0.98);
+  box-shadow: 0 0 0 3px rgba(208, 160, 106, 0.18);
 }
 
 .booking-service-block,
@@ -4258,8 +4264,8 @@ body::after {
 .calendar-controls,
 .booking-calendar-header,
 .tabs-nav {
-  border-color: rgba(43, 37, 30, 0.12);
-  background: rgba(255, 253, 248, 0.64);
+  border-color: var(--line);
+  background: rgba(30, 26, 22, 0.64);
 }
 
 .booking-service-option,
@@ -4269,16 +4275,16 @@ body::after {
 .staff-card,
 .calendar-day,
 #booking-calendar .calendar-day {
-  border: 1px solid rgba(43, 37, 30, 0.12);
-  background: #fffdf8;
-  color: #171512;
+  border: 1px solid var(--line);
+  background: var(--surface-strong);
+  color: var(--text-main);
 }
 
 .booking-service-option:hover,
 .slot-grid button:hover,
 .tab-button:hover {
-  border-color: rgba(107, 74, 50, 0.34);
-  background: #ffffff;
+  border-color: rgba(208, 160, 106, 0.42);
+  background: rgba(38, 32, 27, 0.98);
 }
 
 .service-card-image,
@@ -4286,9 +4292,9 @@ body::after {
 .barber-profile-placeholder,
 .editable-photo-card,
 .booking-service-option img {
-  border-color: rgba(43, 37, 30, 0.12);
-  background: #e7e0d6;
-  color: #6f675d;
+  border-color: var(--line);
+  background: rgba(26, 23, 20, 0.85);
+  color: var(--text-muted);
 }
 
 .barber-social-links a,
@@ -4297,11 +4303,11 @@ body::after {
 .barber-reviews .review-stars,
 .stars,
 .star-btn {
-  color: #6b4a32;
+  color: var(--rust);
 }
 
 .location-map iframe {
-  filter: grayscale(1) contrast(0.95) brightness(1.04);
+  filter: grayscale(1) contrast(0.95) brightness(0.88);
 }
 
 .dashboard-header-sticky {
@@ -4320,12 +4326,12 @@ body::after {
 
 .calendar-card,
 .booking-window-calendar {
-  --calendar-accent: #2b211b;
-  --calendar-accent-soft: rgba(107, 74, 50, 0.14);
-  --calendar-open: #6f7a66;
-  --calendar-booked: #657a7b;
-  --calendar-closed: #9c3f34;
-  background: rgba(248, 246, 241, 0.94);
+  --calendar-accent: rgba(208, 160, 106, 0.95);
+  --calendar-accent-soft: rgba(208, 160, 106, 0.16);
+  --calendar-open: #92a28a;
+  --calendar-booked: #8ea8aa;
+  --calendar-closed: #e0786d;
+  background: var(--surface);
 }
 
 .calendar-controls span,
@@ -4333,12 +4339,12 @@ body::after {
 .booking-calendar-month,
 .booking-selected-date,
 .calendar-day-number {
-  color: #171512;
+  color: var(--text-main);
 }
 
 .calendar-grid > div:not(.calendar-day),
 #booking-calendar.calendar-grid > div:not(.calendar-day) {
-  color: #77716a;
+  color: var(--text-faint);
 }
 
 .calendar-day,
@@ -4353,41 +4359,41 @@ body::after {
 .booking-selected-date,
 .booking-confirmation-summary span,
 #booking-confirmation-timer {
-  background: rgba(43, 33, 27, 0.06);
-  color: #5a5148;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-muted);
 }
 
 .calendar-day.today,
 #booking-calendar .calendar-day.window-today {
-  border-color: rgba(107, 74, 50, 0.46);
-  background: #f3eee6;
+  border-color: rgba(208, 160, 106, 0.46);
+  background: rgba(208, 160, 106, 0.1);
 }
 
 .calendar-day.today .calendar-day-number,
 #booking-calendar .calendar-day.window-today .calendar-day-number {
-  background: #2b211b;
-  color: #fffaf1;
+  background: rgba(208, 160, 106, 0.24);
+  color: var(--text-main);
 }
 
 .calendar-day.has-appointments,
 #booking-calendar .calendar-day.window-future {
-  border-color: rgba(101, 122, 123, 0.34);
-  background: #eef1ef;
+  border-color: rgba(142, 168, 170, 0.34);
+  background: rgba(142, 168, 170, 0.1);
 }
 
 .calendar-day.has-dayoff,
 .calendar-day.has-recurring-dayoff,
 #booking-calendar .calendar-day.window-closed {
-  border-color: rgba(156, 63, 52, 0.32);
-  background: #f5e8e4;
-  color: #5d241e;
+  border-color: rgba(224, 120, 109, 0.34);
+  background: rgba(224, 120, 109, 0.12);
+  color: var(--text-main);
 }
 
 .calendar-day.selected-day,
 .calendar-day.selected-off,
 #booking-calendar .calendar-day.window-selected {
-  border-color: #2b211b;
-  box-shadow: 0 0 0 2px rgba(43, 33, 27, 0.12), 0 14px 28px rgba(36, 30, 24, 0.12);
+  border-color: rgba(208, 160, 106, 0.82);
+  box-shadow: 0 0 0 2px rgba(208, 160, 106, 0.12), 0 14px 28px rgba(0, 0, 0, 0.34);
 }
 
 .modal {
@@ -4396,18 +4402,18 @@ body::after {
 
 .modal-panel,
 .dashboard-panel {
-  background: #f8f6f1;
+  background: var(--surface);
 }
 
 .toast {
-  background: #2b211b;
-  color: #fffaf1;
-  box-shadow: 0 18px 40px rgba(36, 30, 24, 0.22);
+  background: rgba(22, 19, 16, 0.94);
+  color: var(--text-main);
+  box-shadow: var(--shadow);
 }
 
 .site-footer {
-  border-top-color: rgba(43, 37, 30, 0.1);
-  color: #77716a;
+  border-top-color: var(--line);
+  color: var(--text-faint);
 }
 
 @media (max-width: 980px) {
