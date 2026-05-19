@@ -58,6 +58,7 @@ const elements = {
   blockedPhoneNumber: document.getElementById('blocked-phone-number'),
   blockedPhoneReason: document.getElementById('blocked-phone-reason'),
   blockedPhoneList: document.getElementById('blocked-phone-list'),
+  phoneStatsSearch: document.getElementById('phone-stats-search'),
   phoneStatsList: document.getElementById('phone-stats-list'),
   staffReviewsList: document.getElementById('staff-reviews-list'),
   createBarberForm: document.getElementById('create-barber-form'),
@@ -1282,31 +1283,48 @@ function renderPhoneStats() {
   if (!elements.phoneStatsList) return;
   elements.phoneStatsList.innerHTML = '';
 
+  const searchTerm = (elements.phoneStatsSearch?.value || '').replace(/[\s().-]/g, '').toLowerCase();
+  const records = searchTerm
+    ? state.phoneStats.filter(record => String(record.phone_number || '').replace(/[\s().-]/g, '').toLowerCase().includes(searchTerm))
+    : state.phoneStats;
+
   if (!state.phoneStats.length) {
     elements.phoneStatsList.innerHTML = '<p>No phone number history yet.</p>';
     return;
   }
 
-  state.phoneStats.forEach(record => {
+  if (!records.length) {
+    elements.phoneStatsList.innerHTML = '<p>No phone numbers match your search.</p>';
+    return;
+  }
+
+  records.forEach(record => {
     const item = document.createElement('div');
-    item.className = 'dayoff-item';
+    item.className = 'phone-stats-row';
 
-    const info = document.createElement('div');
-    info.className = 'dayoff-item-info';
-
-    const phone = document.createElement('strong');
+    const phone = document.createElement('button');
+    phone.type = 'button';
+    phone.className = 'phone-stats-number';
     phone.textContent = record.phone_number;
+    phone.addEventListener('click', () => {
+      navigator.clipboard.writeText(record.phone_number).then(() => {
+        showToast('Phone number copied.');
+      }).catch(() => {
+        showToast('Could not copy phone number.');
+      });
+    });
 
-    const completed = document.createElement('p');
-    completed.innerHTML = `<strong>Completed:</strong> ${record.completed_appointments_count || 0}`;
+    const completed = document.createElement('span');
+    completed.className = 'phone-stats-pill';
+    completed.textContent = `Completed ${record.completed_appointments_count || 0}`;
 
-    const canceled = document.createElement('p');
-    canceled.innerHTML = `<strong>Canceled:</strong> ${record.canceled_appointments_count || 0}`;
+    const canceled = document.createElement('span');
+    canceled.className = 'phone-stats-pill danger';
+    canceled.textContent = `Canceled ${record.canceled_appointments_count || 0}`;
 
-    info.appendChild(phone);
-    info.appendChild(completed);
-    info.appendChild(canceled);
-    item.appendChild(info);
+    item.appendChild(phone);
+    item.appendChild(completed);
+    item.appendChild(canceled);
     elements.phoneStatsList.appendChild(item);
   });
 }
@@ -1661,6 +1679,7 @@ async function init() {
   elements.profilePhotoFile.addEventListener('change', renderProfilePhotoFilePreview);
   elements.workPhotoFiles.addEventListener('change', renderWorkPhotoFilePreview);
   elements.servicePhotoFile.addEventListener('change', renderServicePhotoFilePreview);
+  elements.phoneStatsSearch?.addEventListener('input', renderPhoneStats);
   elements.createBarberForm.addEventListener('submit', handleCreateBarber);
   elements.dayoffForm.addEventListener('submit', handleDayoffSubmit);
   elements.tabButtons.forEach(btn => btn.addEventListener('click', () => renderTab(btn.dataset.tab)));
