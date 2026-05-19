@@ -38,6 +38,7 @@ DATABASE_URL="postgresql://postgres.<project-ref>:<db-password>@aws-1-eu-central
 SUPABASE_URL="https://<project-ref>.supabase.co"
 SUPABASE_KEY="<supabase-service-role-or-secret-key>"
 SUPABASE_STORAGE_BUCKET="profilePhoto"
+ALLOW_LOCAL_UPLOAD_FALLBACK="false"
 JWT_SECRET="your_secure_secret_key_here_change_in_production"
 PORT=3000
 ```
@@ -104,4 +105,5 @@ Now the frontend will call the external backend at:
 - If the backend API returns CORS errors, enable CORS in `server.js`:
   `app.use(cors());`
 - If the backend cannot connect to Supabase, verify `DATABASE_URL` and `SUPABASE_KEY`.
+- If image uploads fail, verify `SUPABASE_STORAGE_BUCKET` exists or let the backend create it with a service role/secret key. Keep `ALLOW_LOCAL_UPLOAD_FALLBACK=false` on Railway so profile photos are not saved to temporary server disk.
 - If login or booking fails, open browser DevTools and check network requests to `/api`.

@@ -15,8 +15,14 @@ fs.mkdirSync(uploadsDir, { recursive: true });
 const SUPABASE_URL = (process.env.SUPABASE_URL || '').replace(/\/$/, '');
 const SUPABASE_KEY = process.env.SUPABASE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const SUPABASE_STORAGE_BUCKET = process.env.SUPABASE_STORAGE_BUCKET || 'profilePhoto';
+const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
+const ALLOWED_UPLOAD_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+const IS_HOSTED_RUNTIME = process.env.NODE_ENV === 'production' || Boolean(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_PROJECT_ID);
+const ALLOW_LOCAL_UPLOAD_FALLBACK = process.env.ALLOW_LOCAL_UPLOAD_FALLBACK === 'true' || !IS_HOSTED_RUNTIME;
+let storageBucketReadyPromise = null;
 
 // Middleware
+app.set('trust proxy', 1);
 app.use(cors());
 app.use(express.json());
 app.use(express.static('./'));
@@ -54,7 +60,28 @@ app.get('/api/health', async (req, res) => {
 });
 
 const storage = multer.memoryStorage();
-const upload = multer({ storage, limits: { fileSize: 8 * 1024 * 1024 } });
+const upload = multer({
+  storage,
+  limits: { fileSize: MAX_UPLOAD_BYTES },
+  fileFilter: (req, file, callback) => {
+    if (ALLOWED_UPLOAD_MIME_TYPES.has(file.mimetype)) {
+      return callback(null, true);
+    }
+    return callback(new Error('Only JPG, PNG, WEBP, or GIF images can be uploaded.'));
+  },
+});
+
+function uploadPhotosMiddleware(req, res, next) {
+  upload.array('photos', 12)(req, res, (error) => {
+    if (!error) return next();
+
+    if (error.code === 'LIMIT_FILE_SIZE') {
+      return res.status(413).json({ error: 'File too large (max 8MB).' });
+    }
+
+    return res.status(400).json({ error: error.message || 'Upload failed.' });
+  });
+}
 
 const { Pool } = require('pg');
 
@@ -520,29 +547,119 @@ async function sendBookingConfirmationCode(phone, code) {
 }
 
 function getSafeUploadName(originalName) {
-  return String(originalName || 'photo').replace(/[^a-zA-Z0-9.\-]/g, '_');
+  const cleaned = String(originalName || 'photo').replace(/[^a-zA-Z0-9.\-]/g, '_');
+  return cleaned.replace(/^\.+/, '').slice(0, 120) || 'photo';
 }
 
 function getPublicStorageUrl(objectPath) {
   const encodedPath = objectPath.split('/').map(encodeURIComponent).join('/');
-  return `${SUPABASE_URL}/storage/v1/object/public/${SUPABASE_STORAGE_BUCKET}/${encodedPath}`;
+  return `${SUPABASE_URL}/storage/v1/object/public/${encodeURIComponent(SUPABASE_STORAGE_BUCKET)}/${encodedPath}`;
+}
+
+function getStorageHeaders(extraHeaders = {}) {
+  return {
+    Authorization: `Bearer ${SUPABASE_KEY}`,
+    apikey: SUPABASE_KEY,
+    ...extraHeaders,
+  };
+}
+
+async function readSupabaseError(response) {
+  const details = await response.text().catch(() => '');
+  if (!details) return `${response.status} ${response.statusText}`.trim();
+
+  try {
+    const parsed = JSON.parse(details);
+    return parsed.message || parsed.error || details;
+  } catch {
+    return details;
+  }
+}
+
+function getErrorSummary(error) {
+  const parts = [error?.message, error?.cause?.code, error?.cause?.message].filter(Boolean);
+  return [...new Set(parts)].join(' | ') || 'Unknown error';
+}
+
+async function ensureSupabaseStorageBucket() {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return false;
+  if (storageBucketReadyPromise) return storageBucketReadyPromise;
+
+  storageBucketReadyPromise = (async () => {
+    const bucketId = encodeURIComponent(SUPABASE_STORAGE_BUCKET);
+    const getResponse = await fetch(`${SUPABASE_URL}/storage/v1/bucket/${bucketId}`, {
+      headers: getStorageHeaders(),
+    });
+
+    if (getResponse.ok) {
+      const bucket = await getResponse.json().catch(() => ({}));
+      if (bucket.public === false) {
+        const updateResponse = await fetch(`${SUPABASE_URL}/storage/v1/bucket/${bucketId}`, {
+          method: 'PUT',
+          headers: getStorageHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({
+            public: true,
+            file_size_limit: MAX_UPLOAD_BYTES,
+            allowed_mime_types: [...ALLOWED_UPLOAD_MIME_TYPES],
+          }),
+        });
+        if (!updateResponse.ok) {
+          throw new Error(`Could not make Supabase bucket public: ${await readSupabaseError(updateResponse)}`);
+        }
+      }
+      return true;
+    }
+
+    if (getResponse.status !== 404) {
+      throw new Error(`Could not verify Supabase bucket: ${await readSupabaseError(getResponse)}`);
+    }
+
+    const createResponse = await fetch(`${SUPABASE_URL}/storage/v1/bucket`, {
+      method: 'POST',
+      headers: getStorageHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({
+        name: SUPABASE_STORAGE_BUCKET,
+        public: true,
+        file_size_limit: MAX_UPLOAD_BYTES,
+        allowed_mime_types: [...ALLOWED_UPLOAD_MIME_TYPES],
+      }),
+    });
+
+    if (!createResponse.ok) {
+      throw new Error(`Could not create Supabase bucket: ${await readSupabaseError(createResponse)}`);
+    }
+
+    return true;
+  })();
+
+  try {
+    return await storageBucketReadyPromise;
+  } catch (error) {
+    storageBucketReadyPromise = null;
+    throw error;
+  }
+}
+
+function getLocalUploadUrl(req, filename) {
+  const protocol = req.get('x-forwarded-proto') || req.protocol || 'http';
+  return `${protocol}://${req.get('host')}/uploads/${encodeURIComponent(filename)}`;
 }
 
 async function uploadFileToSupabase(file, objectPath) {
   if (!SUPABASE_URL || !SUPABASE_KEY) return null;
-  const response = await fetch(`${SUPABASE_URL}/storage/v1/object/${SUPABASE_STORAGE_BUCKET}/${objectPath}`, {
+  await ensureSupabaseStorageBucket();
+  const encodedPath = objectPath.split('/').map(encodeURIComponent).join('/');
+  const response = await fetch(`${SUPABASE_URL}/storage/v1/object/${encodeURIComponent(SUPABASE_STORAGE_BUCKET)}/${encodedPath}`, {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${SUPABASE_KEY}`,
-      apikey: SUPABASE_KEY,
+    headers: getStorageHeaders({
       'Content-Type': file.mimetype || 'application/octet-stream',
+      'cache-control': '31536000',
       'x-upsert': 'false',
-    },
+    }),
     body: file.buffer,
   });
   if (!response.ok) {
-    const details = await response.text().catch(() => 'Upload failed');
-    throw new Error(`Supabase upload failed: ${details}`);
+    throw new Error(`Supabase upload failed: ${await readSupabaseError(response)}`);
   }
   return getPublicStorageUrl(objectPath);
 }
@@ -1258,29 +1375,44 @@ app.delete('/api/appointments/:id', authenticateToken, async (req, res) => {
   }
 });
 
-app.post('/api/upload', authenticateToken, upload.array('photos', 12), async (req, res) => {
+app.post('/api/upload', authenticateToken, uploadPhotosMiddleware, async (req, res) => {
   if (!req.files || req.files.length === 0) {
     return res.status(400).json({ error: 'No files uploaded' });
   }
   try {
     const type = String(req.body.type || 'photos').replace(/[^a-zA-Z0-9_-]/g, '') || 'photos';
     const uploaded = [];
+    const storageWarnings = [];
 
     for (const [index, file] of req.files.entries()) {
       const safeName = getSafeUploadName(file.originalname);
       const objectPath = `user-${req.user.id}/${type}/${Date.now()}-${index}-${safeName}`;
-      const supabaseUrl = await uploadFileToSupabase(file, objectPath);
+      let supabaseUrl = null;
+      try {
+        supabaseUrl = await uploadFileToSupabase(file, objectPath);
+      } catch (error) {
+        if (!ALLOW_LOCAL_UPLOAD_FALLBACK) {
+          console.error('Supabase upload failed.', error);
+          return res.status(502).json({
+            error: 'Image storage upload failed. Check the Supabase storage bucket and server key.',
+            details: getErrorSummary(error),
+          });
+        }
+
+        storageWarnings.push('Supabase upload failed; saved locally for this environment.');
+        console.error('Supabase upload failed; falling back to local storage.', error);
+      }
 
       if (supabaseUrl) {
         uploaded.push(supabaseUrl);
       } else {
         const filename = `${Date.now()}-${index}-${safeName}`;
         fs.writeFileSync(path.join(uploadsDir, filename), file.buffer);
-        uploaded.push(`/uploads/${filename}`);
+        uploaded.push(getLocalUploadUrl(req, filename));
       }
     }
 
-    res.json({ uploaded });
+    res.json({ uploaded, warnings: [...new Set(storageWarnings)] });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: error.message || 'Upload failed' });
