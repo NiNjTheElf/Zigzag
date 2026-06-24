@@ -182,12 +182,16 @@ async function ensureRuntimeSchema() {
       "studio_id" TEXT NOT NULL,
       "studio_name" TEXT NOT NULL,
       "studio_address" TEXT NOT NULL,
+      "is_recurring" BOOLEAN NOT NULL DEFAULT false,
+      "recurring_day_of_week" INTEGER,
       "notes" TEXT,
       "created_at" TIMESTAMPTZ DEFAULT NOW(),
       "updated_at" TIMESTAMPTZ DEFAULT NOW(),
       UNIQUE ("barber_id", "work_date")
     )
   `);
+  await pool.query('ALTER TABLE "barber_work_days" ADD COLUMN IF NOT EXISTS "is_recurring" BOOLEAN NOT NULL DEFAULT false');
+  await pool.query('ALTER TABLE "barber_work_days" ADD COLUMN IF NOT EXISTS "recurring_day_of_week" INTEGER');
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "blocked_phone_numbers" (
       "id" SERIAL PRIMARY KEY,
@@ -394,6 +398,10 @@ const normalizeWorkDayRecord = (row) => ({
     ? formatDateOnly(row.work_date)
     : row.work_date,
   studio: toPublicStudio(row),
+  is_recurring: Boolean(row.is_recurring),
+  recurring_day_of_week: row.recurring_day_of_week !== null && row.recurring_day_of_week !== undefined
+    ? Number(row.recurring_day_of_week)
+    : null,
 });
 
 function parseTimeToMinutes(label) {
@@ -461,14 +469,31 @@ async function getBarberAvailableTimes(barberId, db = pool) {
 }
 
 async function getBarberWorkDay(barberId, date, db = pool) {
+  const normalizedDate = normalizeDateKey(date);
   const result = await db.query(
-    `SELECT "id", "barber_id", "work_date", "studio_id", "studio_name", "studio_address", "notes", "created_at", "updated_at"
+    `SELECT "id", "barber_id", "work_date", "studio_id", "studio_name", "studio_address", "notes", "is_recurring", "recurring_day_of_week", "created_at", "updated_at"
      FROM "barber_work_days"
      WHERE "barber_id" = $1 AND "work_date" = $2
      LIMIT 1`,
-    [barberId, normalizeDateKey(date)]
+    [barberId, normalizedDate]
   );
-  return result.rows[0] ? normalizeWorkDayRecord(result.rows[0]) : null;
+  if (result.rows[0]) {
+    return normalizeWorkDayRecord(result.rows[0]);
+  }
+
+  const recurringDayOfWeek = getDayOfWeekFromDateKey(normalizedDate);
+  const recurring = await db.query(
+    `SELECT "id", "barber_id", "work_date", "studio_id", "studio_name", "studio_address", "notes", "is_recurring", "recurring_day_of_week", "created_at", "updated_at"
+     FROM "barber_work_days"
+     WHERE "barber_id" = $1
+       AND "is_recurring" = true
+       AND "recurring_day_of_week" = $2
+       AND "work_date" <= $3
+     ORDER BY "work_date" DESC
+     LIMIT 1`,
+    [barberId, recurringDayOfWeek, normalizedDate]
+  );
+  return recurring.rows[0] ? normalizeWorkDayRecord(recurring.rows[0]) : null;
 }
 
 async function getBookedIntervals(barberId, date, ignoreAppointmentId = null, db = pool) {
@@ -1751,9 +1776,9 @@ app.get('/api/workdays/public', async (req, res) => {
     const startDate = formatDateOnly(new Date(parsedYear, parsedMonth - 1, 1));
     const endDate = formatDateOnly(new Date(parsedYear, parsedMonth, 0));
     const result = await pool.query(
-      `SELECT "id", "barber_id", "work_date", "studio_id", "studio_name", "studio_address", "notes", "created_at", "updated_at"
+      `SELECT "id", "barber_id", "work_date", "studio_id", "studio_name", "studio_address", "notes", "is_recurring", "recurring_day_of_week", "created_at", "updated_at"
        FROM "barber_work_days"
-       WHERE "barber_id" = $1 AND "work_date" BETWEEN $2 AND $3
+       WHERE "barber_id" = $1 AND ("work_date" BETWEEN $2 AND $3 OR ("is_recurring" = true AND "work_date" <= $3))
        ORDER BY "work_date"`,
       [parsedBarberId, startDate, endDate]
     );
@@ -1785,7 +1810,7 @@ app.get('/api/workdays', authenticateToken, async (req, res) => {
     if (year && month) {
       const startDate = formatDateOnly(new Date(year, month - 1, 1));
       const endDate = formatDateOnly(new Date(year, month, 0));
-      query += ' AND w."work_date" BETWEEN $' + (params.length + 1) + ' AND $' + (params.length + 2);
+      query += ' AND (w."work_date" BETWEEN $' + (params.length + 1) + ' AND $' + (params.length + 2) + ' OR (w."is_recurring" = true AND w."work_date" <= $' + (params.length + 2) + '))';
       params.push(startDate, endDate);
     }
 
@@ -1802,6 +1827,13 @@ app.post('/api/workdays', authenticateToken, async (req, res) => {
   const date = normalizeDateKey(req.body.date);
   const notes = String(req.body.notes || '').trim() || null;
   const studio = normalizeStudioPayload(req.body.studioId);
+  const isRecurring = Boolean(req.body.isRecurring);
+  let recurringDayOfWeek = null;
+  if (isRecurring) {
+    recurringDayOfWeek = req.body.recurringDayOfWeek !== null && req.body.recurringDayOfWeek !== undefined
+      ? parseInt(req.body.recurringDayOfWeek, 10)
+      : getDayOfWeekFromDateKey(date);
+  }
   const barberId = isManagerRole(req.user.role) && req.body.barberId
     ? parseInt(req.body.barberId, 10)
     : req.user.id;
@@ -1816,17 +1848,19 @@ app.post('/api/workdays', authenticateToken, async (req, res) => {
 
   try {
     const result = await pool.query(
-      `INSERT INTO "barber_work_days" ("barber_id", "work_date", "studio_id", "studio_name", "studio_address", "notes")
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO "barber_work_days" ("barber_id", "work_date", "studio_id", "studio_name", "studio_address", "is_recurring", "recurring_day_of_week", "notes")
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        ON CONFLICT ("barber_id", "work_date")
        DO UPDATE SET
          "studio_id" = EXCLUDED."studio_id",
          "studio_name" = EXCLUDED."studio_name",
          "studio_address" = EXCLUDED."studio_address",
+         "is_recurring" = EXCLUDED."is_recurring",
+         "recurring_day_of_week" = EXCLUDED."recurring_day_of_week",
          "notes" = EXCLUDED."notes",
          "updated_at" = NOW()
        RETURNING *`,
-      [barberId, date, studio.studio_id, studio.studio_name, studio.studio_address, notes]
+      [barberId, date, studio.studio_id, studio.studio_name, studio.studio_address, isRecurring, recurringDayOfWeek, notes]
     );
     res.status(201).json(normalizeWorkDayRecord(result.rows[0]));
   } catch (error) {

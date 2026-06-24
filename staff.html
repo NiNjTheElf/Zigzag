@@ -272,26 +272,38 @@
               <div id="dayoffs-calendar" class="calendar-grid staff-calendar-grid"></div>
             </div>
             <div class="booking-card">
-              <h3>Set Work Day</h3>
+              <h3>Manage Work Schedule</h3>
               <form id="dayoff-form" class="booking-form">
                 <div class="form-group">
                   <label for="dayoff-date">Selected Date</label>
                   <input id="dayoff-date" type="text" readonly />
                 </div>
-                <div class="form-group">
+                <div class="form-group schedule-type-group">
+                  <label>Schedule type</label>
+                  <div class="radio-group">
+                    <label><input id="schedule-type-workday" name="schedule-type" type="radio" value="workday" checked /> Work day</label>
+                    <label><input id="schedule-type-dayoff" name="schedule-type" type="radio" value="dayoff" /> Day off</label>
+                  </div>
+                </div>
+                <div class="form-group workday-only">
                   <label for="workday-studio">Studio</label>
-                  <select id="workday-studio" required></select>
+                  <select id="workday-studio"></select>
                   <p id="workday-studio-address" class="form-note">Choose a studio to attach its address.</p>
+                </div>
+                <div class="form-group">
+                  <label for="schedule-recurring">Repeat weekly</label>
+                  <input id="schedule-recurring" type="checkbox" />
+                  <p class="form-note">Apply this schedule every week on the same weekday.</p>
                 </div>
                 <div class="form-group">
                   <label for="dayoff-notes">Notes</label>
                   <input id="dayoff-notes" type="text" placeholder="Optional staff note" />
                 </div>
-                <button class="btn btn-primary" type="submit">Confirm Work Day</button>
+                <button class="btn btn-primary" type="submit">Save Schedule</button>
               </form>
             </div>
             <div class="booking-card">
-              <h3>Existing work days</h3>
+              <h3>Existing schedule entries</h3>
               <div id="dayoffs-list" class="dayoff-list"></div>
             </div>
           </section>

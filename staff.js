@@ -12,6 +12,7 @@ const state = {
   blockedPhones: [],
   phoneStats: [],
   reviews: [],
+  workDays: [],
   currentApptMonth: new Date(),
   currentDayoffMonth: new Date(),
   selectedApptDate: null,
@@ -72,7 +73,11 @@ const elements = {
   staffList: document.getElementById('staff-list'),
   dayoffForm: document.getElementById('dayoff-form'),
   dayoffDate: document.getElementById('dayoff-date'),
-  dayoffRecurring: document.getElementById('dayoff-recurring'),
+  scheduleTypeWorkday: document.getElementById('schedule-type-workday'),
+  scheduleTypeDayoff: document.getElementById('schedule-type-dayoff'),
+  scheduleRecurring: document.getElementById('schedule-recurring'),
+  workdayStudio: document.getElementById('workday-studio'),
+  workdayStudioAddress: document.getElementById('workday-studio-address'),
   dayoffNotes: document.getElementById('dayoff-notes'),
   dayoffsList: document.getElementById('dayoffs-list'),
   toast: document.getElementById('staff-toast'),
@@ -716,13 +721,54 @@ async function fetchReviews() {
 
 async function fetchDayOffs() {
   const data = await apiCall('/dayoffs', { method: 'GET' });
-  // Regular barbers only see their own day-offs. Boss/senior see the full shop.
   if (state.user && state.user.role !== 'BOSS' && state.user.role !== 'SENIOR_BARBER') {
     state.dayOffs = data.filter(dayOff => dayOff.barber_id === state.user.id);
   } else {
     state.dayOffs = data;
   }
   return state.dayOffs;
+}
+
+async function fetchWorkDays() {
+  const data = await apiCall('/workdays', { method: 'GET' });
+  state.workDays = Array.isArray(data) ? data : [];
+  return state.workDays;
+}
+
+async function fetchStudios() {
+  const data = await apiCall('/studios', { method: 'GET' });
+  state.studios = Array.isArray(data) ? data : [];
+  populateStudioSelect();
+  return state.studios;
+}
+
+function populateStudioSelect() {
+  if (!elements.workdayStudio) return;
+  elements.workdayStudio.innerHTML = '<option value="">Select a studio</option>';
+  state.studios.forEach(studio => {
+    const option = document.createElement('option');
+    option.value = studio.id;
+    option.textContent = studio.name;
+    elements.workdayStudio.appendChild(option);
+  });
+  updateStudioAddress();
+}
+
+function updateStudioAddress() {
+  if (!elements.workdayStudio || !elements.workdayStudioAddress) return;
+  const selectedId = elements.workdayStudio.value;
+  const studio = state.studios.find(item => item.id === selectedId);
+  elements.workdayStudioAddress.textContent = studio ? studio.address : 'Choose a studio to attach its address.';
+}
+
+function toggleScheduleType() {
+  const isWorkday = elements.scheduleTypeWorkday?.checked;
+  document.querySelectorAll('.workday-only').forEach(el => {
+    el.style.display = isWorkday ? '' : 'none';
+  });
+  if (elements.workdayStudio) {
+    elements.workdayStudio.required = Boolean(isWorkday);
+  }
 }
 
 function renderTab(tabName) {
@@ -1041,11 +1087,9 @@ function renderDayOffsCalendar() {
   const daysInMonth = getDaysInMonth(state.currentDayoffMonth);
   const firstDay = getFirstDayOfMonth(state.currentDayoffMonth);
 
-  // Update month display
   const monthName = state.currentDayoffMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
   elements.currentDayoffMonth.textContent = monthName;
 
-  // Create dayoff map for quick lookup
   const dayoffMap = {};
   const recurringDayOfWeeks = new Set();
   state.dayOffs.forEach(dayOff => {
@@ -1056,7 +1100,17 @@ function renderDayOffsCalendar() {
     }
   });
 
-  // Clear calendar
+  const workDayMap = {};
+  const recurringWorkDayByDow = new Map();
+  state.workDays.forEach(workDay => {
+    if (workDay.is_recurring && workDay.recurring_day_of_week !== null && workDay.recurring_day_of_week !== undefined) {
+      recurringWorkDayByDow.set(workDay.recurring_day_of_week, workDay);
+    } else {
+      const dateKey = normalizeDateKey(workDay.work_date);
+      workDayMap[dateKey] = workDay;
+    }
+  });
+
   elements.dayoffsCalendar.innerHTML = '';
 
   const headerDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -1077,7 +1131,6 @@ function renderDayOffsCalendar() {
   const today = new Date();
   const todayKey = formatDateForInput(today);
 
-  // Add days of month
   for (let day = 1; day <= daysInMonth; day++) {
     const date = new Date(year, month, day);
     const dateKey = formatDateForInput(date);
@@ -1096,11 +1149,12 @@ function renderDayOffsCalendar() {
     const dayOff = dayoffMap[dateKey];
     const dayOfWeek = date.getDay();
     const isRecurringDayOff = recurringDayOfWeeks.has(dayOfWeek);
-    
-    if (dayOff) {
+    const workDay = workDayMap[dateKey] || recurringWorkDayByDow.get(dayOfWeek);
+
+    if (dayOff || isRecurringDayOff) {
       dayElement.classList.add('has-dayoff');
-    } else if (isRecurringDayOff) {
-      dayElement.classList.add('has-recurring-dayoff');
+    } else if (workDay) {
+      dayElement.classList.add('has-workday');
     }
 
     const dayNumber = document.createElement('div');
@@ -1108,10 +1162,16 @@ function renderDayOffsCalendar() {
     dayNumber.textContent = day;
     dayElement.appendChild(dayNumber);
 
-    if (dayOff || isRecurringDayOff) {
+    if (dayOff || isRecurringDayOff || workDay) {
       const status = document.createElement('span');
       status.className = 'calendar-day-count';
-      status.textContent = dayOff ? 'Closed' : 'Weekly';
+      if (dayOff) {
+        status.textContent = 'Closed';
+      } else if (isRecurringDayOff) {
+        status.textContent = 'Weekly Off';
+      } else if (workDay) {
+        status.textContent = `Work @ ${workDay.studio.name}`;
+      }
       dayElement.appendChild(status);
     }
 
@@ -1122,7 +1182,7 @@ function renderDayOffsCalendar() {
     elements.dayoffsCalendar.appendChild(dayElement);
   }
 
-  const totalCells = startOffset + getDaysInMonth(state.currentDayoffMonth);
+  const totalCells = startOffset + daysInMonth;
   const remainder = (7 - (totalCells % 7)) % 7;
   for (let i = 0; i < remainder; i++) {
     const emptyDay = document.createElement('div');
@@ -1138,7 +1198,7 @@ function selectDayOffDate(date) {
     elements.dayoffDate.value = dateKey;
   }
   renderDayOffsCalendar();
-  
+
   const appointmentsOnDate = state.appointments.filter(appt => normalizeDateKey(appt.appointment_date) === dateKey);
   if (appointmentsOnDate.length > 0) {
     showToast(`Warning: ${appointmentsOnDate.length} appointment(s) on this date. You may need to cancel them manually.`);
@@ -1147,36 +1207,69 @@ function selectDayOffDate(date) {
 
 function renderDayOffs() {
   elements.dayoffsList.innerHTML = '';
-  if (!state.dayOffs.length) {
-    elements.dayoffsList.innerHTML = '<p>No day offs yet.</p>';
+  const weekdayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const scheduleItems = [
+    ...state.workDays.map(day => ({
+      type: 'workday',
+      title: day.is_recurring && day.recurring_day_of_week !== null && day.recurring_day_of_week !== undefined
+        ? `Every ${weekdayNames[day.recurring_day_of_week]} @ ${day.studio.name}`
+        : `Work ${formatIsoDateShort(day.work_date)} @ ${day.studio.name}`,
+      details: day.studio.address,
+      notes: day.notes,
+      id: day.id,
+      sortKey: day.is_recurring && day.recurring_day_of_week !== null && day.recurring_day_of_week !== undefined
+        ? `9999-${day.recurring_day_of_week}`
+        : day.work_date,
+    })),
+    ...state.dayOffs.map(dayOff => ({
+      type: 'dayoff',
+      title: dayOff.is_recurring && dayOff.recurring_day_of_week !== null && dayOff.recurring_day_of_week !== undefined
+        ? `Every ${['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][dayOff.recurring_day_of_week]}`
+        : formatIsoDateShort(dayOff.day_off_date),
+      details: dayOff.is_recurring ? 'Recurring day off' : 'Closed',
+      notes: dayOff.notes,
+      id: dayOff.id,
+      sortKey: dayOff.day_off_date,
+    })),
+  ];
+
+  if (!scheduleItems.length) {
+    elements.dayoffsList.innerHTML = '<p>No schedule entries yet.</p>';
     return;
   }
-  state.dayOffs.forEach(dayOff => {
+
+  scheduleItems.sort((a, b) => {
+    if (a.type !== b.type) return a.type === 'dayoff' ? -1 : 1;
+    if (a.sortKey < b.sortKey) return -1;
+    if (a.sortKey > b.sortKey) return 1;
+    return 0;
+  });
+
+  scheduleItems.forEach(itemData => {
     const item = document.createElement('div');
     item.className = 'dayoff-item';
-    let when = formatIsoDateShort(dayOff.day_off_date);
-    if (dayOff.is_recurring && dayOff.recurring_day_of_week !== null && dayOff.recurring_day_of_week !== undefined) {
-      when = `Every ${['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][dayOff.recurring_day_of_week]}`;
-    }
     item.innerHTML = `
       <div class="dayoff-item-info">
-        <strong>${when}</strong>
-        <p>${dayOff.notes || 'No notes'}</p>
+        <strong>${itemData.title}</strong>
+        <p>${itemData.details || 'No notes'}</p>
+        ${itemData.notes ? `<p>${itemData.notes}</p>` : ''}
       </div>
-      <button class="dayoff-item-delete" type="button" data-id="${dayOff.id}">Delete</button>
+      <button class="dayoff-item-delete" type="button" data-id="${itemData.id}" data-type="${itemData.type}">Delete</button>
     `;
     elements.dayoffsList.appendChild(item);
   });
 
   elements.dayoffsList.querySelectorAll('.dayoff-item-delete').forEach(button => {
     button.addEventListener('click', async () => {
-      if (!confirm('Delete this day off?')) return;
+      const id = button.dataset.id;
+      const type = button.dataset.type;
+      if (!confirm(`Delete this ${type === 'workday' ? 'work day' : 'day off'}?`)) return;
       try {
-        await apiCall(`/dayoffs/${button.dataset.id}`, { method: 'DELETE' });
-        showToast('Day off deleted.');
+        await apiCall(`/${type === 'workday' ? 'workdays' : 'dayoffs'}/${id}`, { method: 'DELETE' });
+        showToast(`${type === 'workday' ? 'Work day' : 'Day off'} deleted.`);
         await refreshDayOffs();
       } catch (error) {
-        showToast('Could not delete day off: ' + error.message);
+        showToast(`Could not delete ${type === 'workday' ? 'work day' : 'day off'}: ` + error.message);
       }
     });
   });
@@ -1496,30 +1589,49 @@ async function handleDayoffSubmit(event) {
   }
   try {
     const date = state.selectedDayoffDate;
-    const isRecurring = elements.dayoffRecurring.checked;
+    const isRecurring = elements.scheduleRecurring.checked;
     const notes = elements.dayoffNotes.value.trim();
-    
-    let recurringDayOfWeek = null;
-    if (isRecurring) {
-      recurringDayOfWeek = getDayOfWeekFromDateKey(date);
+    const isWorkday = elements.scheduleTypeWorkday?.checked;
+
+    if (isWorkday) {
+      const studioId = elements.workdayStudio?.value;
+      if (!studioId) {
+        showToast('Choose a studio for the work day.');
+        return;
+      }
+      const recurringDayOfWeek = isRecurring ? getDayOfWeekFromDateKey(date) : null;
+      await apiCall('/workdays', {
+        method: 'POST',
+        body: JSON.stringify({
+          date,
+          studioId,
+          isRecurring,
+          recurringDayOfWeek,
+          notes,
+        }),
+      });
+      showToast('Work day saved.');
+    } else {
+      const recurringDayOfWeek = isRecurring ? getDayOfWeekFromDateKey(date) : null;
+      await apiCall('/dayoffs', {
+        method: 'POST',
+        body: JSON.stringify({
+          barberId: state.user.id,
+          date,
+          isRecurring,
+          recurringDayOfWeek,
+          notes,
+        }),
+      });
+      showToast('Day off saved.');
     }
-    
-    await apiCall('/dayoffs', {
-      method: 'POST',
-      body: JSON.stringify({ 
-        barberId: state.user.id,
-        date, 
-        isRecurring, 
-        recurringDayOfWeek,
-        notes 
-      }),
-    });
+
     elements.dayoffForm.reset();
     state.selectedDayoffDate = null;
-    showToast('Day off saved.');
+    toggleScheduleType();
     await refreshDayOffs();
   } catch (error) {
-    showToast('Could not save day off: ' + error.message);
+    showToast('Could not save schedule: ' + error.message);
   }
 }
 
@@ -1580,7 +1692,7 @@ async function refreshAppointments() {
 }
 
 async function refreshDayOffs() {
-  await fetchDayOffs();
+  await Promise.all([fetchDayOffs(), fetchWorkDays()]);
   renderDayOffsCalendar();
   renderDayOffs();
 }
@@ -1628,6 +1740,7 @@ async function refreshAll() {
 
   const results = await Promise.allSettled([
     refreshBarbers(),
+    fetchStudios(),
     refreshDayOffs(),
     refreshAvailability(),
     refreshBlockedPhones(),
@@ -1682,7 +1795,12 @@ async function init() {
   elements.phoneStatsSearch?.addEventListener('input', renderPhoneStats);
   elements.createBarberForm.addEventListener('submit', handleCreateBarber);
   elements.dayoffForm.addEventListener('submit', handleDayoffSubmit);
+  elements.scheduleTypeWorkday?.addEventListener('change', toggleScheduleType);
+  elements.scheduleTypeDayoff?.addEventListener('change', toggleScheduleType);
+  elements.scheduleRecurring?.addEventListener('change', toggleScheduleType);
+  elements.workdayStudio?.addEventListener('change', updateStudioAddress);
   elements.tabButtons.forEach(btn => btn.addEventListener('click', () => renderTab(btn.dataset.tab)));
+  toggleScheduleType();
   
   // Calendar navigation
   elements.prevApptMonthBtn.addEventListener('click', () => {

@@ -137,6 +137,8 @@ CREATE TABLE IF NOT EXISTS "barber_work_days" (
     "studio_id" TEXT NOT NULL,
     "studio_name" TEXT NOT NULL,
     "studio_address" TEXT NOT NULL,
+    "is_recurring" BOOLEAN DEFAULT FALSE,
+    "recurring_day_of_week" INTEGER,
     "notes" TEXT,
     "created_at" TIMESTAMPTZ DEFAULT NOW(),
     "updated_at" TIMESTAMPTZ DEFAULT NOW(),
