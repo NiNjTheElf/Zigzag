@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ZigZag Hairplace - Staff Portal</title>
+  <title>Dont Tell Mom Barbershop - Staff Portal</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="styles.css" />
@@ -15,7 +15,10 @@
 <body>
   <div class="page-shell">
     <header class="site-header">
-      <a class="brand" href="index.html">ZigZag Hairplace</a>
+      <a class="brand brand-with-logo" href="index.html">
+        <img src="assets/dont-tell-mom-logo.jpg" alt="Dont Tell Mom Barbershop logo" />
+        <span>Dont Tell Mom</span>
+      </a>
       <nav class="site-nav" aria-label="Main navigation">
         <a href="index.html#studio">Studio</a>
         <a href="index.html#barbers">Barbers</a>
@@ -31,7 +34,7 @@
           <form id="staff-login-form" class="booking-form">
             <div class="form-group">
               <label for="staff-email">Email</label>
-              <input id="staff-email" type="email" placeholder="boss@zigzag.com" required />
+              <input id="staff-email" type="email" placeholder="boss@donttellmom.lv" required />
             </div>
             <div class="form-group">
               <label for="staff-password">Password</label>
@@ -55,7 +58,7 @@
 
           <div class="tabs-nav">
             <button class="tab-button active" data-tab="appointments">Appointments</button>
-            <button class="tab-button" data-tab="dayoffs">Day Offs</button>
+            <button class="tab-button" data-tab="dayoffs">Work Days</button>
             <button class="tab-button" data-tab="profile">Profile</button>
             <button class="tab-button" data-tab="services">Services</button>
             <button class="tab-button" data-tab="availability">Times</button>
@@ -96,11 +99,11 @@
                 <div class="form-row">
                   <div class="form-group half-width">
                     <label for="profile-instagram">Instagram</label>
-                    <input id="profile-instagram" type="text" placeholder="@zigzag.barber" />
+                    <input id="profile-instagram" type="text" placeholder="@donttellmom.barber" />
                   </div>
                   <div class="form-group half-width">
                     <label for="profile-tiktok">TikTok</label>
-                    <input id="profile-tiktok" type="text" placeholder="@zigzag.barber" />
+                    <input id="profile-tiktok" type="text" placeholder="@donttellmom.barber" />
                   </div>
                 </div>
                 <div class="form-group">
@@ -260,7 +263,7 @@
 
           <section id="dayoffs-tab" class="tab-panel hidden">
             <div class="booking-card calendar-card staff-calendar-card">
-              <h3>Day Off Calendar</h3>
+              <h3>Work Day Calendar</h3>
               <div class="calendar-controls">
                 <button id="prev-dayoff-month" class="btn btn-small">&larr;</button>
                 <span id="current-dayoff-month">Month Year</span>
@@ -269,26 +272,26 @@
               <div id="dayoffs-calendar" class="calendar-grid staff-calendar-grid"></div>
             </div>
             <div class="booking-card">
-              <h3>Set Day Off</h3>
+              <h3>Set Work Day</h3>
               <form id="dayoff-form" class="booking-form">
                 <div class="form-group">
                   <label for="dayoff-date">Selected Date</label>
                   <input id="dayoff-date" type="text" readonly />
                 </div>
                 <div class="form-group">
-                  <label>
-                    <input id="dayoff-recurring" type="checkbox" /> Recurring weekly
-                  </label>
+                  <label for="workday-studio">Studio</label>
+                  <select id="workday-studio" required></select>
+                  <p id="workday-studio-address" class="form-note">Choose a studio to attach its address.</p>
                 </div>
                 <div class="form-group">
                   <label for="dayoff-notes">Notes</label>
-                  <input id="dayoff-notes" type="text" placeholder="Optional" />
+                  <input id="dayoff-notes" type="text" placeholder="Optional staff note" />
                 </div>
-                <button class="btn btn-primary" type="submit">Confirm Day Off</button>
+                <button class="btn btn-primary" type="submit">Confirm Work Day</button>
               </form>
             </div>
             <div class="booking-card">
-              <h3>Existing day offs</h3>
+              <h3>Existing work days</h3>
               <div id="dayoffs-list" class="dayoff-list"></div>
             </div>
           </section>
@@ -297,7 +300,7 @@
     </main>
 
     <footer class="site-footer">
-      <p>&copy; 2026 ZigZag Hairplace</p>
+      <p>&copy; 2026 Dont Tell Mom Barbershop</p>
     </footer>
   </div>
   <div id="staff-toast" class="toast hidden"></div>

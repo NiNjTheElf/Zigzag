@@ -27,11 +27,23 @@ CREATE TABLE IF NOT EXISTS "appointments" (
     "appointment_time" TEXT,
     "service_type" TEXT,
     "duration_minutes" INTEGER NOT NULL DEFAULT 60,
+    "studio_id" TEXT,
+    "studio_name" TEXT,
+    "studio_address" TEXT,
     "created_at" TIMESTAMPTZ DEFAULT NOW()
 );
 
 ALTER TABLE "appointments"
 ADD COLUMN IF NOT EXISTS "duration_minutes" INTEGER NOT NULL DEFAULT 60;
+
+ALTER TABLE "appointments"
+ADD COLUMN IF NOT EXISTS "studio_id" TEXT;
+
+ALTER TABLE "appointments"
+ADD COLUMN IF NOT EXISTS "studio_name" TEXT;
+
+ALTER TABLE "appointments"
+ADD COLUMN IF NOT EXISTS "studio_address" TEXT;
 
 CREATE INDEX IF NOT EXISTS "appointments_barber_date_idx"
 ON "appointments" ("barber_id", "appointment_date");
@@ -61,6 +73,9 @@ CREATE TABLE IF NOT EXISTS "booking_confirmations" (
     "appointment_time" TEXT NOT NULL,
     "service_type" TEXT NOT NULL DEFAULT 'Haircut',
     "duration_minutes" INTEGER NOT NULL DEFAULT 60,
+    "studio_id" TEXT,
+    "studio_name" TEXT,
+    "studio_address" TEXT,
     "code_hash" TEXT NOT NULL,
     "status" TEXT NOT NULL DEFAULT 'pending' CHECK ("status" IN ('pending', 'confirmed', 'expired', 'failed')),
     "attempt_count" INTEGER NOT NULL DEFAULT 0,
@@ -77,6 +92,15 @@ WHERE "status" = 'pending';
 CREATE INDEX IF NOT EXISTS "booking_confirmations_pending_phone_idx"
 ON "booking_confirmations" ("client_phone", "created_at")
 WHERE "status" = 'pending';
+
+ALTER TABLE "booking_confirmations"
+ADD COLUMN IF NOT EXISTS "studio_id" TEXT;
+
+ALTER TABLE "booking_confirmations"
+ADD COLUMN IF NOT EXISTS "studio_name" TEXT;
+
+ALTER TABLE "booking_confirmations"
+ADD COLUMN IF NOT EXISTS "studio_address" TEXT;
 
 -- 6. Create the Day Offs table
 CREATE TABLE IF NOT EXISTS "day_offs" (
@@ -105,7 +129,24 @@ CREATE TABLE IF NOT EXISTS "barber_available_times" (
 CREATE INDEX IF NOT EXISTS "barber_available_times_barber_sort_idx"
 ON "barber_available_times" ("barber_id", "sort_minutes");
 
--- 8. Create blocked phone numbers per barber
+-- 8. Create work days with auto-attached studio locations
+CREATE TABLE IF NOT EXISTS "barber_work_days" (
+    "id" SERIAL PRIMARY KEY,
+    "barber_id" INTEGER NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+    "work_date" DATE NOT NULL,
+    "studio_id" TEXT NOT NULL,
+    "studio_name" TEXT NOT NULL,
+    "studio_address" TEXT NOT NULL,
+    "notes" TEXT,
+    "created_at" TIMESTAMPTZ DEFAULT NOW(),
+    "updated_at" TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE ("barber_id", "work_date")
+);
+
+CREATE INDEX IF NOT EXISTS "barber_work_days_barber_date_idx"
+ON "barber_work_days" ("barber_id", "work_date");
+
+-- 9. Create blocked phone numbers per barber
 CREATE TABLE IF NOT EXISTS "blocked_phone_numbers" (
     "id" SERIAL PRIMARY KEY,
     "barber_id" INTEGER NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
@@ -125,7 +166,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS "blocked_phone_numbers_one_active_idx"
 ON "blocked_phone_numbers" ("barber_id", "phone_number")
 WHERE "is_active" = true;
 
--- 9. Create the Reviews table
+-- 10. Create the Reviews table
 CREATE TABLE IF NOT EXISTS "reviews" (
     "id" SERIAL PRIMARY KEY,
     "barber_id" INTEGER NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
@@ -139,12 +180,12 @@ CREATE TABLE IF NOT EXISTS "reviews" (
     "created_at" TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 10. Insert default users
+-- 11. Insert default users
 INSERT INTO "users" ("name", "email", "password", "role") VALUES
-  ('ZigZag Boss', 'boss@zigzag.com', '$2a$10$ZQIPoLW9k43OdCYADIN3L.FPO8eMClEevulVoSlG19QYDSqU9FLL.', 'BOSS'),
-  ('Alex Mercer', 'alex@zigzag.com', '$2a$10$peowVLs8e7k42yYXuBtPwOFnWy.PYQotK5kzYQLJtB10UJQuzFP4m', 'BARBER'),
-  ('Maya Lane', 'maya@zigzag.com', '$2a$10$6fExTKbH9KXG1K3D.FdhL.W46yJqdn9aOG.DfnMzOLTRK9Ad.WvKS', 'BARBER'),
-  ('Marcus Stone', 'marcus@zigzag.com', '$2a$10$X8vN4kM2zY9pR3sL7tQ1H.uWj5PmKnD2bE6cF4hG8iJ1lO0aB2C3Y', 'SENIOR_BARBER')
+  ('Dont Tell Mom Boss', 'boss@donttellmom.lv', '$2a$10$ZQIPoLW9k43OdCYADIN3L.FPO8eMClEevulVoSlG19QYDSqU9FLL.', 'BOSS'),
+  ('Alex Mercer', 'alex@donttellmom.lv', '$2a$10$peowVLs8e7k42yYXuBtPwOFnWy.PYQotK5kzYQLJtB10UJQuzFP4m', 'BARBER'),
+  ('Maya Lane', 'maya@donttellmom.lv', '$2a$10$6fExTKbH9KXG1K3D.FdhL.W46yJqdn9aOG.DfnMzOLTRK9Ad.WvKS', 'BARBER'),
+  ('Marcus Stone', 'marcus@donttellmom.lv', '$2a$10$X8vN4kM2zY9pR3sL7tQ1H.uWj5PmKnD2bE6cF4hG8iJ1lO0aB2C3Y', 'SENIOR_BARBER')
 ON CONFLICT ("email") DO NOTHING;
 
 -- Note: Default passwords are hashed versions of:

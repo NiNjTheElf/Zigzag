@@ -1,25 +1,25 @@
 ﻿@import url('https://fonts.googleapis.com/css2?family=Russo+One&family=IBM+Plex+Sans+Condensed:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600;700&display=swap');
 
 :root {
-  color-scheme: light;
-  --bg-color: #f5f3f0;
-  --surface: rgba(240, 237, 230, 0.92);
-  --surface-strong: rgba(250, 248, 244, 0.98);
-  --surface-soft: rgba(24, 25, 23, 0.055);
-  --text-main: #2a2925;
-  --text-muted: #5a5550;
-  --text-faint: #8a8078;
-  --line: rgba(42, 41, 37, 0.13);
-  --line-strong: rgba(42, 41, 37, 0.24);
-  --concrete: #666159;
-  --asphalt: #e8e5df;
-  --rust: #a84735;
-  --rust-dark: #d9a397;
-  --amber: #b8932a;
-  --blue-grey: #5a7578;
-  --moss: #667866;
+  color-scheme: dark;
+  --bg-color: #050505;
+  --surface: rgba(22, 22, 22, 0.94);
+  --surface-strong: rgba(12, 12, 12, 0.98);
+  --surface-soft: rgba(255, 255, 255, 0.05);
+  --text-main: #f4f4f4;
+  --text-muted: #b3b3b3;
+  --text-faint: #7e7e7e;
+  --line: rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.14);
+  --concrete: #d3d3d3;
+  --asphalt: #111111;
+  --rust: #d0d0d0;
+  --rust-dark: #8c8c8c;
+  --amber: #ebebeb;
+  --blue-grey: #9f9f9f;
+  --moss: #8c8c8c;
   --danger: #d63f3f;
-  --shadow: 0 24px 80px rgba(0, 0, 0, 0.08);
+  --shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
   font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   background: var(--bg-color);
   color: var(--text-main);
@@ -46,10 +46,10 @@ body {
 body {
   min-height: 100vh;
   background:
-    radial-gradient(circle at 14% 10%, rgba(168, 71, 53, 0.08), transparent 28rem),
-    radial-gradient(circle at 88% 8%, rgba(142, 162, 165, 0.08), transparent 24rem),
-    linear-gradient(140deg, rgba(0, 0, 0, 0.02), transparent 36%),
-    linear-gradient(180deg, #e8e5df 0%, #f0ede6 48%, #faf8f4 100%);
+    radial-gradient(circle at 18% 12%, rgba(255, 255, 255, 0.06), transparent 26rem),
+    radial-gradient(circle at 86% 8%, rgba(255, 255, 255, 0.04), transparent 20rem),
+    linear-gradient(140deg, rgba(255, 255, 255, 0.02), transparent 36%),
+    linear-gradient(180deg, #050505 0%, #121212 48%, #090909 100%);
   color: var(--text-main);
   font-family: 'Inter', system-ui, sans-serif;
   overflow-x: hidden;
@@ -176,13 +176,13 @@ button {
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, var(--rust), var(--rust-dark));
-  color: #fff7ee;
-  border-color: rgba(255, 189, 137, 0.28);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.22));
+  color: #101010;
+  border-color: rgba(255, 255, 255, 0.16);
 }
 
 .btn-primary:hover {
-  background: linear-gradient(135deg, #bd523d, #78332c);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.32));
 }
 
 .btn-secondary {
@@ -309,11 +309,11 @@ button {
   border-radius: 8px;
   overflow: hidden;
   background:
-    linear-gradient(180deg, rgba(14, 15, 14, 0.05), rgba(14, 15, 14, 0.62)),
-    repeating-linear-gradient(90deg, transparent 0 64px, rgba(236, 232, 221, 0.18) 64px 66px),
-    repeating-linear-gradient(0deg, transparent 0 58px, rgba(236, 232, 221, 0.12) 58px 60px),
-    linear-gradient(135deg, #5d625e, #252825 46%, #111211);
-  border: 1px solid rgba(236, 232, 221, 0.2);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(0, 0, 0, 0.82)),
+    repeating-linear-gradient(90deg, transparent 0 64px, rgba(255, 255, 255, 0.05) 64px 66px),
+    repeating-linear-gradient(0deg, transparent 0 58px, rgba(255, 255, 255, 0.04) 58px 60px),
+    linear-gradient(135deg, #1a1a1a, #101010 46%, #050505);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow: var(--shadow);
 }
 
@@ -321,12 +321,12 @@ button {
   content: '';
   position: absolute;
   inset: 9%;
-  border: 1px solid rgba(236, 232, 221, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   background:
-    linear-gradient(116deg, transparent 0 26%, rgba(255, 255, 255, 0.35) 26.15%, transparent 26.9%),
-    linear-gradient(52deg, transparent 0 55%, rgba(0, 0, 0, 0.5) 55.1%, transparent 55.7%),
-    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.08) 0 1px, transparent 1px 52px),
-    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.24) 0 1px, transparent 1px 44px);
+    linear-gradient(116deg, transparent 0 26%, rgba(255, 255, 255, 0.15) 26.15%, transparent 26.9%),
+    linear-gradient(52deg, transparent 0 55%, rgba(0, 0, 0, 0.4) 55.1%, transparent 55.7%),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.05) 0 1px, transparent 1px 52px),
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.18) 0 1px, transparent 1px 44px);
 }
 
 .hero-frame::after {
@@ -337,12 +337,12 @@ button {
   width: 54%;
   height: 48%;
   background:
-    linear-gradient(142deg, transparent 0 42%, rgba(168, 71, 53, 0.55) 42.2%, transparent 43%),
-    linear-gradient(180deg, rgba(14, 15, 14, 0.25), rgba(14, 15, 14, 0.78)),
-    repeating-linear-gradient(90deg, rgba(236, 232, 221, 0.14) 0 2px, transparent 2px 38px),
-    #2b2d29;
-  border-left: 1px solid rgba(236, 232, 221, 0.18);
-  border-top: 1px solid rgba(236, 232, 221, 0.18);
+    linear-gradient(142deg, transparent 0 42%, rgba(255, 255, 255, 0.2) 42.2%, transparent 43%),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.22), rgba(0, 0, 0, 0.72)),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.06) 0 2px, transparent 2px 38px),
+    #111111;
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 
@@ -499,12 +499,12 @@ button {
   resize: vertical;
 }
 
-.form-group input:focus,
+..form-group input:focus,
 .form-group select:focus,
 .form-group textarea:focus {
-  border-color: rgba(215, 168, 87, 0.72);
+  border-color: rgba(255, 255, 255, 0.22);
   background: rgba(8, 9, 8, 0.88);
-  box-shadow: 0 0 0 3px rgba(215, 168, 87, 0.14);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.08);
 }
 
 .form-group input::placeholder,
@@ -855,8 +855,8 @@ button {
 }
 
 .close-btn:hover {
-  background: rgba(226, 93, 77, 0.2);
-  border-color: rgba(226, 93, 77, 0.48);
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.22);
 }
 
 .dashboard-header-sticky {
@@ -1045,7 +1045,7 @@ button {
 
 .calendar-day:hover {
   transform: translateY(-1px);
-  border-color: rgba(215, 168, 87, 0.58);
+  border-color: rgba(255, 255, 255, 0.22);
 }
 
 .calendar-day.other-month {
@@ -1054,27 +1054,27 @@ button {
 }
 
 .calendar-day.today {
-  border-color: rgba(215, 168, 87, 0.82);
-  background: rgba(215, 168, 87, 0.11);
+  border-color: rgba(255, 255, 255, 0.32);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .calendar-day.has-appointments {
-  border-color: rgba(142, 162, 165, 0.82);
-  background: rgba(142, 162, 165, 0.11);
+  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .calendar-day.has-dayoff {
-  border-color: rgba(226, 93, 77, 0.74);
+  border-color: rgba(255, 255, 255, 0.24);
   background:
-    linear-gradient(135deg, rgba(226, 93, 77, 0.18), rgba(0, 0, 0, 0.06)),
-    rgba(236, 232, 221, 0.045);
+    linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(0, 0, 0, 0.06)),
+    rgba(255, 255, 255, 0.03);
 }
 
 .calendar-day.has-recurring-dayoff {
-  border-color: rgba(239, 68, 68, 0.9);
+  border-color: rgba(255, 255, 255, 0.34);
   background:
-    linear-gradient(135deg, rgba(239, 68, 68, 0.3), rgba(0, 0, 0, 0.06)),
-    rgba(236, 232, 221, 0.045);
+    linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(0, 0, 0, 0.06)),
+    rgba(255, 255, 255, 0.03);
 }
 
 .calendar-day.selected-off {
@@ -1159,9 +1159,9 @@ button {
 
 .dayoff-item-delete,
 .staff-card button {
-  background: rgba(226, 93, 77, 0.16);
-  border: 1px solid rgba(226, 93, 77, 0.28);
-  color: #ffb1a8;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: var(--text-main);
   padding: 9px 12px;
   border-radius: 8px;
   cursor: pointer;
@@ -1170,8 +1170,8 @@ button {
 
 .dayoff-item-delete:hover,
 .staff-card button:hover {
-  background: rgba(226, 93, 77, 0.26);
-  border-color: rgba(226, 93, 77, 0.5);
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.22);
 }
 
 .phone-number {
@@ -1385,7 +1385,7 @@ button {
   border-radius: 8px;
   background:
     linear-gradient(90deg, rgba(14, 15, 13, 0.92), rgba(14, 15, 13, 0.52)),
-    linear-gradient(130deg, rgba(215, 168, 87, 0.16), transparent 40%),
+    linear-gradient(130deg, rgba(255, 255, 255, 0.08), transparent 40%),
     url('assets/zigzag-interior.avif') center / cover;
   box-shadow: var(--shadow);
   overflow: hidden;
@@ -2162,33 +2162,33 @@ body::after {
 
 /* DSCO street-block refresh + booking window calendar */
 :root {
-  --bg-color: #3b3f40;
-  --surface: rgba(45, 49, 50, 0.92);
-  --surface-strong: rgba(57, 62, 63, 0.95);
-  --surface-soft: rgba(230, 238, 234, 0.08);
-  --text-main: #edf1ef;
-  --text-muted: #ced6d3;
-  --text-faint: #a8b3b0;
-  --line: rgba(209, 220, 215, 0.22);
-  --line-strong: rgba(209, 220, 215, 0.34);
-  --rust: #646868;
-  --rust-dark: #4b4f4f;
-  --amber: #b1bab7;
-  --blue-grey: #82928d;
+  --bg-color: #090909;
+  --surface: rgba(25, 25, 25, 0.92);
+  --surface-strong: rgba(14, 14, 14, 0.96);
+  --surface-soft: rgba(255, 255, 255, 0.05);
+  --text-main: #f4f4f4;
+  --text-muted: #b4b4b4;
+  --text-faint: #7d7d7d;
+  --line: rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.16);
+  --rust: #c4c4c4;
+  --rust-dark: #6b6b6b;
+  --amber: #f0f0f0;
+  --blue-grey: #9a9a9a;
 }
 
 body {
   font-family: 'IBM Plex Sans Condensed', 'Segoe UI', sans-serif;
   background:
-    radial-gradient(circle at 18% 8%, rgba(236, 243, 239, 0.07), transparent 42rem),
-    radial-gradient(circle at 86% 16%, rgba(228, 236, 233, 0.04), transparent 36rem),
+    radial-gradient(circle at 18% 8%, rgba(255, 255, 255, 0.05), transparent 42rem),
+    radial-gradient(circle at 86% 16%, rgba(255, 255, 255, 0.03), transparent 36rem),
     linear-gradient(
       180deg,
-      #525859 0%,
-      #424849 26%,
-      #383d3e 54%,
-      #4b5051 74%,
-      #323738 100%
+      #161616 0%,
+      #111111 26%,
+      #0c0c0c 54%,
+      #0f0f0f 74%,
+      #0b0b0b 100%
     );
 }
 
@@ -2199,9 +2199,9 @@ body {
 body::before {
   opacity: 0.42;
   background:
-    repeating-linear-gradient(0deg, rgba(20, 17, 13, 0.05) 0 1px, transparent 1px 8px),
-    repeating-linear-gradient(90deg, rgba(20, 17, 13, 0.04) 0 1px, transparent 1px 10px),
-    linear-gradient(126deg, transparent 0 58%, rgba(20, 17, 13, 0.12) 58.2%, transparent 59%);
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.03) 0 1px, transparent 1px 8px),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.02) 0 1px, transparent 1px 10px),
+    linear-gradient(126deg, transparent 0 58%, rgba(255, 255, 255, 0.08) 58.2%, transparent 59%);
 }
 
 body::after {
@@ -2639,23 +2639,23 @@ body::after {
 /* Premium asphalt redesign */
 :root {
   color-scheme: dark;
-  --bg-color: #111314;
-  --surface: rgba(22, 25, 25, 0.88);
-  --surface-strong: rgba(28, 31, 31, 0.96);
-  --surface-soft: rgba(238, 232, 218, 0.07);
-  --text-main: #f1eee6;
-  --text-muted: #bbb6aa;
-  --text-faint: #7f837d;
-  --line: rgba(232, 226, 211, 0.13);
-  --line-strong: rgba(232, 226, 211, 0.25);
-  --concrete: #d3cec1;
-  --asphalt: #151718;
-  --rust: #8f3d32;
-  --rust-dark: #4d211e;
-  --amber: #c4a15c;
-  --blue-grey: #99a9a6;
-  --moss: #7a8373;
-  --danger: #d85b4f;
+  --bg-color: #080808;
+  --surface: rgba(18, 18, 18, 0.94);
+  --surface-strong: rgba(12, 12, 12, 0.98);
+  --surface-soft: rgba(255, 255, 255, 0.04);
+  --text-main: #f6f6f6;
+  --text-muted: #b8b8b8;
+  --text-faint: #7a7a7a;
+  --line: rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.18);
+  --concrete: #d7d7d7;
+  --asphalt: #111111;
+  --rust: #c1c1c1;
+  --rust-dark: #6d6d6d;
+  --amber: #e8e8e8;
+  --blue-grey: #9a9a9a;
+  --moss: #8c8c8c;
+  --danger: #d63f3f;
   --shadow: 0 28px 70px rgba(0, 0, 0, 0.46);
   background: var(--bg-color);
   color: var(--text-main);
@@ -2663,16 +2663,16 @@ body::after {
 
 html {
   scroll-behavior: smooth;
-  background: #111314;
+  background: #080808;
 }
 
 body {
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.045), transparent 15rem),
-    linear-gradient(115deg, transparent 0 18%, rgba(255, 255, 255, 0.025) 18.1% 18.35%, transparent 18.45%),
-    linear-gradient(250deg, transparent 0 64%, rgba(196, 161, 92, 0.055) 64.1% 64.45%, transparent 64.6%),
-    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.025) 0 1px, transparent 1px 96px),
-    linear-gradient(180deg, #202324 0%, #151819 42%, #101212 100%);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent 15rem),
+    linear-gradient(115deg, transparent 0 18%, rgba(255, 255, 255, 0.02) 18.1% 18.35%, transparent 18.45%),
+    linear-gradient(250deg, transparent 0 64%, rgba(255, 255, 255, 0.06) 64.1% 64.45%, transparent 64.6%),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.02) 0 1px, transparent 1px 96px),
+    linear-gradient(180deg, #161616 0%, #101010 42%, #0b0b0b 100%);
   color: var(--text-main);
   font-family: 'IBM Plex Sans Condensed', 'Segoe UI', system-ui, sans-serif;
 }
@@ -2680,18 +2680,18 @@ body {
 body::before {
   opacity: 0.5;
   background:
-    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.026) 0 1px, transparent 1px 7px),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.02) 0 1px, transparent 1px 7px),
     repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.18) 0 1px, transparent 1px 13px),
-    linear-gradient(36deg, transparent 0 74%, rgba(196, 161, 92, 0.09) 74.1%, transparent 74.5%);
+    linear-gradient(36deg, transparent 0 74%, rgba(255, 255, 255, 0.08) 74.1%, transparent 74.5%);
   mix-blend-mode: soft-light;
 }
 
 body::after {
   opacity: 0.28;
   background:
-    linear-gradient(90deg, transparent 0 8%, rgba(255, 255, 255, 0.05) 8.08%, transparent 8.2%),
-    linear-gradient(90deg, transparent 0 88%, rgba(255, 255, 255, 0.04) 88.06%, transparent 88.2%),
-    linear-gradient(180deg, transparent 0 72%, rgba(0, 0, 0, 0.28) 72%, rgba(0, 0, 0, 0.7) 100%);
+    linear-gradient(90deg, transparent 0 8%, rgba(255, 255, 255, 0.04) 8.08%, transparent 8.2%),
+    linear-gradient(90deg, transparent 0 88%, rgba(255, 255, 255, 0.03) 88.06%, transparent 88.2%),
+    linear-gradient(180deg, transparent 0 72%, rgba(0, 0, 0, 0.3) 72%, rgba(0, 0, 0, 0.75) 100%);
   mix-blend-mode: normal;
 }
 
@@ -3228,47 +3228,47 @@ body::after {
 
 /* Concrete palette refinement */
 :root {
-  color-scheme: light;
-  --bg-color: #e0e0e0;
-  --surface: rgba(47, 47, 47, 0.94);
-  --surface-strong: #525252;
-  --surface-soft: rgba(0, 0, 0, 0.055);
-  --text-main: #000000;
-  --text-muted: #5f5f5f;
-  --text-faint: #8c8c8c;
-  --line: rgba(0, 0, 0, 0.14);
-  --line-strong: rgba(0, 0, 0, 0.28);
-  --concrete: #8c8c8c;
-  --asphalt: #525252;
-  --rust: #000000;
-  --rust-dark: #525252;
-  --amber: #000000;
-  --blue-grey: #6f6f6f;
-  --moss: #8c8c8c;
-  --danger: #7a2b25;
-  --shadow: 0 24px 64px rgba(0, 0, 0, 0.18);
+  color-scheme: dark;
+  --bg-color: #090909;
+  --surface: rgba(20, 20, 20, 0.94);
+  --surface-strong: rgba(12, 12, 12, 0.98);
+  --surface-soft: rgba(255, 255, 255, 0.04);
+  --text-main: #f5f5f5;
+  --text-muted: #b5b5b5;
+  --text-faint: #7b7b7b;
+  --line: rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.18);
+  --concrete: #d1d1d1;
+  --asphalt: #121212;
+  --rust: #b3b3b3;
+  --rust-dark: #696969;
+  --amber: #ebebeb;
+  --blue-grey: #9d9d9d;
+  --moss: #8a8a8a;
+  --danger: #d63f3f;
+  --shadow: 0 24px 64px rgba(0, 0, 0, 0.25);
 }
 
 html {
-  background: #e0e0e0;
+  background: #090909;
 }
 
 body {
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.62), transparent 24rem),
-    linear-gradient(115deg, transparent 0 20%, rgba(0, 0, 0, 0.045) 20.1% 20.25%, transparent 20.35%),
-    linear-gradient(250deg, transparent 0 67%, rgba(0, 0, 0, 0.04) 67.1% 67.35%, transparent 67.5%),
-    repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.035) 0 1px, transparent 1px 108px),
-    linear-gradient(180deg, #eeeeee 0%, #e0e0e0 44%, #d2d2d2 100%);
-  color: #000000;
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent 24rem),
+    linear-gradient(115deg, transparent 0 20%, rgba(255, 255, 255, 0.02) 20.1% 20.25%, transparent 20.35%),
+    linear-gradient(250deg, transparent 0 67%, rgba(255, 255, 255, 0.03) 67.1% 67.35%, transparent 67.5%),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.01) 0 1px, transparent 1px 108px),
+    linear-gradient(180deg, #121212 0%, #0e0e0e 44%, #0b0b0b 100%);
+  color: var(--text-main);
 }
 
 body::before {
   opacity: 0.32;
   background:
-    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.05) 0 1px, transparent 1px 8px),
-    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.22) 0 1px, transparent 1px 13px),
-    linear-gradient(36deg, transparent 0 74%, rgba(0, 0, 0, 0.08) 74.1%, transparent 74.5%);
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.02) 0 1px, transparent 1px 8px),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.08) 0 1px, transparent 1px 13px),
+    linear-gradient(36deg, transparent 0 74%, rgba(255, 255, 255, 0.04) 74.1%, transparent 74.5%);
   mix-blend-mode: multiply;
 }
 
@@ -3999,26 +3999,26 @@ img {
   }
 }
   
-/* Luxury minimal refresh - warm brown / soft gray */
+/* Luxury minimal refresh - warm gray / charcoal */
 :root {
   color-scheme: dark;
-  --bg-color: #100f0d;
-  --surface: rgba(22, 19, 16, 0.9);
-  --surface-strong: rgba(30, 26, 22, 0.96);
-  --surface-soft: rgba(255, 255, 255, 0.06);
-  --text-main: #f2ece2;
-  --text-muted: rgba(242, 236, 226, 0.72);
-  --text-faint: rgba(242, 236, 226, 0.52);
-  --line: rgba(242, 236, 226, 0.12);
-  --line-strong: rgba(242, 236, 226, 0.22);
-  --concrete: rgba(242, 236, 226, 0.64);
-  --asphalt: #141210;
-  --rust: #b07a54;
-  --rust-dark: #3a261c;
-  --amber: #d0a06a;
-  --blue-grey: #8ea8aa;
-  --moss: #92a28a;
-  --danger: #e0786d;
+  --bg-color: #0a0a0a;
+  --surface: rgba(18, 18, 18, 0.9);
+  --surface-strong: rgba(24, 24, 24, 0.96);
+  --surface-soft: rgba(255, 255, 255, 0.05);
+  --text-main: #f6f6f6;
+  --text-muted: rgba(246, 246, 246, 0.72);
+  --text-faint: rgba(246, 246, 246, 0.52);
+  --line: rgba(246, 246, 246, 0.12);
+  --line-strong: rgba(246, 246, 246, 0.22);
+  --concrete: rgba(246, 246, 246, 0.64);
+  --asphalt: #111111;
+  --rust: #c4c4c4;
+  --rust-dark: #5f5f5f;
+  --amber: #e5e5e5;
+  --blue-grey: #a6a6a6;
+  --moss: #8f8f8f;
+  --danger: #d63f3f;
   --shadow: 0 28px 70px rgba(0, 0, 0, 0.45);
   font-family: 'IBM Plex Sans Condensed', 'Segoe UI', system-ui, -apple-system, sans-serif;
 }
@@ -4029,10 +4029,10 @@ html {
 
 body {
   background:
-    radial-gradient(circle at 14% 10%, rgba(176, 122, 84, 0.16), transparent 34rem),
-    radial-gradient(circle at 86% 8%, rgba(142, 168, 170, 0.12), transparent 30rem),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0, rgba(255, 255, 255, 0) 360px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    radial-gradient(circle at 14% 10%, rgba(255, 255, 255, 0.05), transparent 34rem),
+    radial-gradient(circle at 86% 8%, rgba(255, 255, 255, 0.03), transparent 30rem),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0, rgba(255, 255, 255, 0) 360px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
     var(--bg-color);
   background-size: auto, auto, auto, 112px 112px, auto;
   color: var(--text-main);

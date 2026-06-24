@@ -29,7 +29,7 @@ app.use(express.static('./'));
 app.use('/uploads', express.static(uploadsDir));
 
 app.get('/api/health', async (req, res) => {
-  const configuredTables = ['users', 'appointments', 'day_offs', 'reviews', 'booking_confirmations', 'barber_available_times', 'phone_number_stats'];
+  const configuredTables = ['users', 'appointments', 'day_offs', 'barber_work_days', 'reviews', 'booking_confirmations', 'barber_available_times', 'phone_number_stats'];
   try {
     const dbNow = await pool.query('SELECT NOW() AS now');
     const tables = await pool.query(
@@ -105,6 +105,18 @@ pool.connect((err, client, release) => {
 const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret_key_change_in_production';
 const SLOT_TIMES = ['10:00 AM', '11:30 AM', '1:00 PM', '2:30 PM', '4:00 PM', '5:30 PM'];
 const DEFAULT_SERVICE_DURATION = 60;
+const STUDIO_LOCATIONS = [
+  {
+    id: 'studio-1',
+    name: '1st studio',
+    address: 'Avotu iela 34, Riga, LV-1009',
+  },
+  {
+    id: 'studio-2',
+    name: '2nd studio',
+    address: 'Second studio address to be added',
+  },
+];
 const BOOKING_CONFIRMATION_TTL_MINUTES = 10;
 const MAX_CONFIRMATION_ATTEMPTS = 5;
 const RECAPTCHA_ENTERPRISE_SITE_KEY = process.env.RECAPTCHA_ENTERPRISE_SITE_KEY || '6Ld4a-osAAAAAI4WQbqNttxKKgfFlx2rOTcnK-oR';
@@ -115,6 +127,9 @@ const FIREBASE_WEB_API_KEY = process.env.FIREBASE_WEB_API_KEY || process.env.FIR
 
 async function ensureRuntimeSchema() {
   await pool.query('ALTER TABLE "appointments" ADD COLUMN IF NOT EXISTS "duration_minutes" INTEGER NOT NULL DEFAULT 60');
+  await pool.query('ALTER TABLE "appointments" ADD COLUMN IF NOT EXISTS "studio_id" TEXT');
+  await pool.query('ALTER TABLE "appointments" ADD COLUMN IF NOT EXISTS "studio_name" TEXT');
+  await pool.query('ALTER TABLE "appointments" ADD COLUMN IF NOT EXISTS "studio_address" TEXT');
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "phone_number_stats" (
       "id" SERIAL PRIMARY KEY,
@@ -134,6 +149,9 @@ async function ensureRuntimeSchema() {
       "appointment_time" TEXT NOT NULL,
       "service_type" TEXT NOT NULL DEFAULT 'Haircut',
       "duration_minutes" INTEGER NOT NULL DEFAULT 60,
+      "studio_id" TEXT,
+      "studio_name" TEXT,
+      "studio_address" TEXT,
       "code_hash" TEXT NOT NULL,
       "status" TEXT NOT NULL DEFAULT 'pending',
       "attempt_count" INTEGER NOT NULL DEFAULT 0,
@@ -143,6 +161,9 @@ async function ensureRuntimeSchema() {
       "created_at" TIMESTAMPTZ DEFAULT NOW()
     )
   `);
+  await pool.query('ALTER TABLE "booking_confirmations" ADD COLUMN IF NOT EXISTS "studio_id" TEXT');
+  await pool.query('ALTER TABLE "booking_confirmations" ADD COLUMN IF NOT EXISTS "studio_name" TEXT');
+  await pool.query('ALTER TABLE "booking_confirmations" ADD COLUMN IF NOT EXISTS "studio_address" TEXT');
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "barber_available_times" (
       "id" SERIAL PRIMARY KEY,
@@ -151,6 +172,20 @@ async function ensureRuntimeSchema() {
       "sort_minutes" INTEGER NOT NULL,
       "created_at" TIMESTAMPTZ DEFAULT NOW(),
       UNIQUE ("barber_id", "sort_minutes")
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "barber_work_days" (
+      "id" SERIAL PRIMARY KEY,
+      "barber_id" INTEGER NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+      "work_date" DATE NOT NULL,
+      "studio_id" TEXT NOT NULL,
+      "studio_name" TEXT NOT NULL,
+      "studio_address" TEXT NOT NULL,
+      "notes" TEXT,
+      "created_at" TIMESTAMPTZ DEFAULT NOW(),
+      "updated_at" TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE ("barber_id", "work_date")
     )
   `);
   await pool.query(`
@@ -170,6 +205,7 @@ async function ensureRuntimeSchema() {
   await pool.query('CREATE INDEX IF NOT EXISTS "appointments_client_phone_idx" ON "appointments" ("client_phone")');
   await pool.query('CREATE UNIQUE INDEX IF NOT EXISTS "phone_number_stats_phone_number_idx" ON "phone_number_stats" ("phone_number")');
   await pool.query('CREATE INDEX IF NOT EXISTS "day_offs_barber_date_idx" ON "day_offs" ("barber_id", "day_off_date")');
+  await pool.query('CREATE INDEX IF NOT EXISTS "barber_work_days_barber_date_idx" ON "barber_work_days" ("barber_id", "work_date")');
   await pool.query('CREATE INDEX IF NOT EXISTS "barber_available_times_barber_sort_idx" ON "barber_available_times" ("barber_id", "sort_minutes")');
   await pool.query('CREATE INDEX IF NOT EXISTS "blocked_phone_numbers_barber_active_idx" ON "blocked_phone_numbers" ("barber_id", "is_active", "phone_number")');
   await pool.query(`
@@ -328,6 +364,38 @@ function normalizeDuration(value) {
   return Math.min(Math.max(duration, 5), 480);
 }
 
+function getStudioLocation(studioId) {
+  const normalizedId = String(studioId || '').trim().toLowerCase();
+  return STUDIO_LOCATIONS.find(studio => studio.id === normalizedId) || null;
+}
+
+function normalizeStudioPayload(studioId) {
+  const studio = getStudioLocation(studioId);
+  if (!studio) return null;
+  return {
+    studio_id: studio.id,
+    studio_name: studio.name,
+    studio_address: studio.address,
+  };
+}
+
+function toPublicStudio(workDay) {
+  if (!workDay) return null;
+  return {
+    id: workDay.studio_id,
+    name: workDay.studio_name,
+    address: workDay.studio_address,
+  };
+}
+
+const normalizeWorkDayRecord = (row) => ({
+  ...row,
+  work_date: row.work_date instanceof Date
+    ? formatDateOnly(row.work_date)
+    : row.work_date,
+  studio: toPublicStudio(row),
+});
+
 function parseTimeToMinutes(label) {
   if (!label) return null;
   const text = String(label).trim();
@@ -390,6 +458,17 @@ async function getBarberAvailableTimes(barberId, db = pool) {
     time_label: time,
     sort_minutes: parseTimeToMinutes(time),
   }));
+}
+
+async function getBarberWorkDay(barberId, date, db = pool) {
+  const result = await db.query(
+    `SELECT "id", "barber_id", "work_date", "studio_id", "studio_name", "studio_address", "notes", "created_at", "updated_at"
+     FROM "barber_work_days"
+     WHERE "barber_id" = $1 AND "work_date" = $2
+     LIMIT 1`,
+    [barberId, normalizeDateKey(date)]
+  );
+  return result.rows[0] ? normalizeWorkDayRecord(result.rows[0]) : null;
 }
 
 async function getBookedIntervals(barberId, date, ignoreAppointmentId = null, db = pool) {
@@ -608,7 +687,7 @@ function getDateLockKey(dateKey) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-async function checkBookingAvailability(barberId, date, time, duration, db = pool) {
+async function checkBookingAvailability(barberId, date, time, duration, db = pool, ignoreAppointmentId = null) {
   const dateKey = normalizeDateKey(date);
   const dayOffResult = await db.query(
     'SELECT "id" FROM "day_offs" WHERE "barber_id" = $1 AND ("day_off_date" = $2 OR ("is_recurring" = true AND "recurring_day_of_week" = $3))',
@@ -619,9 +698,14 @@ async function checkBookingAvailability(barberId, date, time, duration, db = poo
     return { available: false, error: 'Barber is off on this date' };
   }
 
-  const available = await isTimeAvailable(barberId, dateKey, time, duration, null, db);
+  const workDay = await getBarberWorkDay(barberId, dateKey, db);
+  if (!workDay) {
+    return { available: false, error: 'Barber has not marked this date as a work day' };
+  }
+
+  const available = await isTimeAvailable(barberId, dateKey, time, duration, ignoreAppointmentId, db);
   return available
-    ? { available: true }
+    ? { available: true, workDay }
     : { available: false, error: 'Time slot is no longer available' };
 }
 
@@ -1191,13 +1275,31 @@ app.get('/api/appointments/available', async (req, res) => {
       return res.json({ available: [], isDayOff: true });
     }
 
+    const workDay = await getBarberWorkDay(parsedBarberId, date);
+    if (!workDay) {
+      return res.json({
+        available: [],
+        isDayOff: false,
+        isWorking: false,
+        studio: null,
+        error: 'Barber has not marked this date as a work day',
+      });
+    }
+
     const duration = await resolveAppointmentDuration(parsedBarberId, serviceType, durationMinutes);
     const slots = await getBarberAvailableTimes(parsedBarberId);
     const bookedIntervals = await getBookedIntervals(parsedBarberId, date);
     const available = slots
       .filter(slot => !bookedIntervals.some(interval => intervalsOverlap(slot.sort_minutes, slot.sort_minutes + duration, interval.start, interval.end)))
       .map(slot => slot.time_label);
-    res.json({ available, isDayOff: false, durationMinutes: duration });
+    res.json({
+      available,
+      isDayOff: false,
+      isWorking: true,
+      durationMinutes: duration,
+      studio: toPublicStudio(workDay),
+      workDay,
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to fetch available slots' });
@@ -1229,12 +1331,13 @@ app.post('/api/booking-confirmations/request', async (req, res) => {
     const token = createConfirmationToken();
     const codeHash = hashVerificationCode(token, code);
     const delivery = await sendBookingConfirmationCode(normalizedPhone, code);
+    const studio = toPublicStudio(availability.workDay);
 
     const result = await pool.query(
       `INSERT INTO "booking_confirmations"
-        ("confirmation_token", "barber_id", "client_name", "client_phone", "appointment_date", "appointment_time", "service_type", "duration_minutes", "code_hash", "expires_at")
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW() + ($10 * interval '1 minute'))
-       RETURNING "confirmation_token", "barber_id", "client_name", "client_phone", "appointment_date", "appointment_time", "service_type", "duration_minutes", "expires_at"`,
+        ("confirmation_token", "barber_id", "client_name", "client_phone", "appointment_date", "appointment_time", "service_type", "duration_minutes", "studio_id", "studio_name", "studio_address", "code_hash", "expires_at")
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW() + ($13 * interval '1 minute'))
+       RETURNING "confirmation_token", "barber_id", "client_name", "client_phone", "appointment_date", "appointment_time", "service_type", "duration_minutes", "studio_id", "studio_name", "studio_address", "expires_at"`,
       [
         token,
         parsedBarberId,
@@ -1244,6 +1347,9 @@ app.post('/api/booking-confirmations/request', async (req, res) => {
         time,
         serviceType || 'Haircut',
         duration,
+        studio.id,
+        studio.name,
+        studio.address,
         codeHash,
         BOOKING_CONFIRMATION_TTL_MINUTES,
       ]
@@ -1345,7 +1451,7 @@ app.post('/api/booking-confirmations/confirm', async (req, res) => {
     }
 
     const appointmentResult = await client.query(
-      'INSERT INTO "appointments" ("barber_id", "client_name", "client_phone", "appointment_date", "appointment_time", "service_type", "duration_minutes") VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+      'INSERT INTO "appointments" ("barber_id", "client_name", "client_phone", "appointment_date", "appointment_time", "service_type", "duration_minutes", "studio_id", "studio_name", "studio_address") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *',
       [
         confirmation.barber_id,
         confirmation.client_name,
@@ -1354,6 +1460,9 @@ app.post('/api/booking-confirmations/confirm', async (req, res) => {
         confirmation.appointment_time,
         confirmation.service_type || 'Haircut',
         normalizeDuration(confirmation.duration_minutes),
+        availability.workDay.studio_id,
+        availability.workDay.studio_name,
+        availability.workDay.studio_address,
       ]
     );
 
@@ -1386,27 +1495,29 @@ app.post('/api/appointments', requireRecaptchaEnterprise('BOOK_APPOINTMENT'), re
   }
   try {
     const duration = await resolveAppointmentDuration(parsedBarberId, serviceType, durationMinutes);
-    const checkDayOff = await pool.query(
-      'SELECT * FROM "day_offs" WHERE "barber_id" = $1 AND ("day_off_date" = $2 OR ("is_recurring" = true AND "recurring_day_of_week" = $3))',
-      [parsedBarberId, date, getDayOfWeekFromDateKey(date)]
-    );
-
-    if (checkDayOff.rows.length > 0) {
-      return res.status(400).json({ error: 'Barber is off on this date' });
+    const availability = await checkBookingAvailability(parsedBarberId, date, time, duration);
+    if (!availability.available) {
+      return res.status(400).json({ error: availability.error });
     }
     const block = await isPhoneBlockedForBarber(parsedBarberId, normalizedClientPhone);
     if (block) {
       return res.status(403).json({ error: 'This phone number cannot book with the selected barber.' });
     }
 
-    const available = await isTimeAvailable(parsedBarberId, date, time, duration);
-    if (!available) {
-      return res.status(400).json({ error: 'Time slot is no longer available' });
-    }
-
     const result = await pool.query(
-      'INSERT INTO "appointments" ("barber_id", "client_name", "client_phone", "appointment_date", "appointment_time", "service_type", "duration_minutes") VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
-      [parsedBarberId, clientName, normalizedClientPhone, date, time, serviceType || 'Haircut', duration]
+      'INSERT INTO "appointments" ("barber_id", "client_name", "client_phone", "appointment_date", "appointment_time", "service_type", "duration_minutes", "studio_id", "studio_name", "studio_address") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *',
+      [
+        parsedBarberId,
+        clientName,
+        normalizedClientPhone,
+        date,
+        time,
+        serviceType || 'Haircut',
+        duration,
+        availability.workDay.studio_id,
+        availability.workDay.studio_name,
+        availability.workDay.studio_address,
+      ]
     );
     await addPhoneNumberStats(normalizedClientPhone);
 
@@ -1447,24 +1558,28 @@ app.post('/api/appointments/:id/move-next-day', authenticateToken, async (req, r
     currentDate.setDate(currentDate.getDate() + 1);
     const nextDate = formatDateOnly(currentDate);
 
-    const dayOffResult = await pool.query(
-      'SELECT * FROM "day_offs" WHERE "barber_id" = $1 AND ("day_off_date" = $2 OR ("is_recurring" = true AND "recurring_day_of_week" = $3))',
-      [appointment.barber_id, nextDate, getDayOfWeekFromDateKey(nextDate)]
-    );
-
-    if (dayOffResult.rows.length > 0) {
-      return res.status(400).json({ error: 'Barber is off on the next day' });
-    }
-
     const duration = normalizeDuration(appointment.duration_minutes || await resolveAppointmentDuration(appointment.barber_id, appointment.service_type));
-    const available = await isTimeAvailable(appointment.barber_id, nextDate, appointment.appointment_time, duration, appointmentId);
-    if (!available) {
-      return res.status(400).json({ error: 'The same time slot is already booked on the next day' });
+    const availability = await checkBookingAvailability(
+      appointment.barber_id,
+      nextDate,
+      appointment.appointment_time,
+      duration,
+      pool,
+      appointmentId
+    );
+    if (!availability.available) {
+      return res.status(400).json({ error: availability.error });
     }
 
     const updateResult = await pool.query(
-      'UPDATE "appointments" SET "appointment_date" = $1 WHERE "id" = $2 RETURNING *',
-      [nextDate, appointmentId]
+      'UPDATE "appointments" SET "appointment_date" = $1, "studio_id" = $2, "studio_name" = $3, "studio_address" = $4 WHERE "id" = $5 RETURNING *',
+      [
+        nextDate,
+        availability.workDay.studio_id,
+        availability.workDay.studio_name,
+        availability.workDay.studio_address,
+        appointmentId,
+      ]
     );
 
     res.json(normalizeAppointmentRecord(updateResult.rows[0]));
@@ -1493,24 +1608,22 @@ app.post('/api/appointments/:id/reschedule', authenticateToken, async (req, res)
       return res.status(403).json({ error: 'Access denied to reschedule this appointment' });
     }
 
-    const dayOffResult = await pool.query(
-      'SELECT * FROM "day_offs" WHERE "barber_id" = $1 AND ("day_off_date" = $2 OR ("is_recurring" = true AND "recurring_day_of_week" = $3))',
-      [appointment.barber_id, date, getDayOfWeekFromDateKey(date)]
-    );
-
-    if (dayOffResult.rows.length > 0) {
-      return res.status(400).json({ error: 'Barber is off on the selected date' });
-    }
-
     const duration = normalizeDuration(appointment.duration_minutes || await resolveAppointmentDuration(appointment.barber_id, appointment.service_type));
-    const available = await isTimeAvailable(appointment.barber_id, date, time, duration, appointmentId);
-    if (!available) {
-      return res.status(400).json({ error: 'Selected slot is already booked' });
+    const availability = await checkBookingAvailability(appointment.barber_id, date, time, duration, pool, appointmentId);
+    if (!availability.available) {
+      return res.status(400).json({ error: availability.error });
     }
 
     const updateResult = await pool.query(
-      'UPDATE "appointments" SET "appointment_date" = $1, "appointment_time" = $2 WHERE "id" = $3 RETURNING *',
-      [date, time, appointmentId]
+      'UPDATE "appointments" SET "appointment_date" = $1, "appointment_time" = $2, "studio_id" = $3, "studio_name" = $4, "studio_address" = $5 WHERE "id" = $6 RETURNING *',
+      [
+        date,
+        time,
+        availability.workDay.studio_id,
+        availability.workDay.studio_name,
+        availability.workDay.studio_address,
+        appointmentId,
+      ]
     );
 
     res.json(normalizeAppointmentRecord(updateResult.rows[0]));
@@ -1616,6 +1729,131 @@ app.post('/api/upload', authenticateToken, uploadPhotosMiddleware, async (req, r
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: error.message || 'Upload failed' });
+  }
+});
+
+// ==================== STUDIO / WORK-DAY ROUTES ====================
+
+app.get('/api/studios', (req, res) => {
+  res.json(STUDIO_LOCATIONS);
+});
+
+app.get('/api/workdays/public', async (req, res) => {
+  const parsedBarberId = parseInt(req.query.barberId, 10);
+  const parsedYear = parseInt(req.query.year, 10);
+  const parsedMonth = parseInt(req.query.month, 10);
+
+  if (isNaN(parsedBarberId) || isNaN(parsedYear) || isNaN(parsedMonth) || parsedMonth < 1 || parsedMonth > 12) {
+    return res.status(400).json({ error: 'barberId, year, and month are required' });
+  }
+
+  try {
+    const startDate = formatDateOnly(new Date(parsedYear, parsedMonth - 1, 1));
+    const endDate = formatDateOnly(new Date(parsedYear, parsedMonth, 0));
+    const result = await pool.query(
+      `SELECT "id", "barber_id", "work_date", "studio_id", "studio_name", "studio_address", "notes", "created_at", "updated_at"
+       FROM "barber_work_days"
+       WHERE "barber_id" = $1 AND "work_date" BETWEEN $2 AND $3
+       ORDER BY "work_date"`,
+      [parsedBarberId, startDate, endDate]
+    );
+    res.json({ workDays: result.rows.map(normalizeWorkDayRecord) });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to fetch work days' });
+  }
+});
+
+app.get('/api/workdays', authenticateToken, async (req, res) => {
+  const { barberId, year, month } = req.query;
+  try {
+    const params = [];
+    let query = `
+      SELECT w.*, u."name" AS "barber_name"
+      FROM "barber_work_days" w
+      LEFT JOIN "users" u ON u."id" = w."barber_id"
+      WHERE 1=1`;
+
+    if (!isManagerRole(req.user.role)) {
+      query += ' AND w."barber_id" = $' + (params.length + 1);
+      params.push(req.user.id);
+    } else if (barberId) {
+      query += ' AND w."barber_id" = $' + (params.length + 1);
+      params.push(parseInt(barberId, 10));
+    }
+
+    if (year && month) {
+      const startDate = formatDateOnly(new Date(year, month - 1, 1));
+      const endDate = formatDateOnly(new Date(year, month, 0));
+      query += ' AND w."work_date" BETWEEN $' + (params.length + 1) + ' AND $' + (params.length + 2);
+      params.push(startDate, endDate);
+    }
+
+    query += ' ORDER BY w."work_date", u."name"';
+    const result = await pool.query(query, params);
+    res.json(result.rows.map(normalizeWorkDayRecord));
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to fetch work days' });
+  }
+});
+
+app.post('/api/workdays', authenticateToken, async (req, res) => {
+  const date = normalizeDateKey(req.body.date);
+  const notes = String(req.body.notes || '').trim() || null;
+  const studio = normalizeStudioPayload(req.body.studioId);
+  const barberId = isManagerRole(req.user.role) && req.body.barberId
+    ? parseInt(req.body.barberId, 10)
+    : req.user.id;
+
+  if (isNaN(barberId) || !date || !studio) {
+    return res.status(400).json({ error: 'Date and studio are required' });
+  }
+
+  if (!isManagerRole(req.user.role) && barberId !== req.user.id) {
+    return res.status(403).json({ error: 'You can only edit your own work days' });
+  }
+
+  try {
+    const result = await pool.query(
+      `INSERT INTO "barber_work_days" ("barber_id", "work_date", "studio_id", "studio_name", "studio_address", "notes")
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT ("barber_id", "work_date")
+       DO UPDATE SET
+         "studio_id" = EXCLUDED."studio_id",
+         "studio_name" = EXCLUDED."studio_name",
+         "studio_address" = EXCLUDED."studio_address",
+         "notes" = EXCLUDED."notes",
+         "updated_at" = NOW()
+       RETURNING *`,
+      [barberId, date, studio.studio_id, studio.studio_name, studio.studio_address, notes]
+    );
+    res.status(201).json(normalizeWorkDayRecord(result.rows[0]));
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to save work day' });
+  }
+});
+
+app.delete('/api/workdays/:id', authenticateToken, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) {
+    return res.status(400).json({ error: 'Invalid work day' });
+  }
+
+  try {
+    const query = isManagerRole(req.user.role)
+      ? 'DELETE FROM "barber_work_days" WHERE "id" = $1 RETURNING "id"'
+      : 'DELETE FROM "barber_work_days" WHERE "id" = $1 AND "barber_id" = $2 RETURNING "id"';
+    const params = isManagerRole(req.user.role) ? [id] : [id, req.user.id];
+    const result = await pool.query(query, params);
+    if (!result.rows.length) {
+      return res.status(404).json({ error: 'Work day not found or access denied' });
+    }
+    res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to delete work day' });
   }
 });
 
