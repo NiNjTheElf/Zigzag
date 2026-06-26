@@ -705,12 +705,17 @@ button {
 .barber-profile-card {
   display: grid;
   grid-template-columns: minmax(10px, 0.9fr) minmax(0, 1.25fr);
-  gap: 18px;
+  gap: 10px;
+  align-items: start;
+  padding: 18px;
+  aspect-ratio: 1 / 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .barber-profile-images {
   display: grid;
-  gap: 10px;
+  gap: 6px;
 }
 
 .barber-profile-images img,
@@ -724,7 +729,7 @@ button {
 
 .barber-profile-images img,
 .barber-profile-placeholder {
-  min-height: 112px;
+  min-height: 72px;
   object-fit: cover;
 }
 
@@ -734,17 +739,17 @@ button {
   align-items: center;
   justify-content: center;
   text-align: center;
-  padding: 18px;
+  padding: 14px;
 }
 
 .barber-profile-info {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
 }
 
 .barber-profile-info strong {
-  font-size: 1.16rem;
+  font-size: 1rem;
 }
 
 .barber-social-links a,
@@ -759,20 +764,20 @@ button {
 
 .barber-reviews .review-stars {
   color: var(--amber);
-  font-size: 1rem;
-  margin-bottom: 6px;
+  font-size: 0.95rem;
+  margin-bottom: 4px;
 }
 
 .barber-reviews p {
   margin: 4px 0;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   font-style: italic;
 }
 
 .barber-profile-card .btn-secondary {
   align-self: start;
-  padding: 10px 14px;
-  min-height: 40px;
+  padding: 8px 12px;
+  min-height: 34px;
 }
 
 .location-map iframe {
@@ -1393,14 +1398,26 @@ button {
   justify-content: space-between;
   gap: 24px;
   padding: clamp(28px, 5vw, 54px);
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 20px;
   background:
-    linear-gradient(90deg, rgba(14, 15, 13, 0.92), rgba(14, 15, 13, 0.52)),
-    linear-gradient(130deg, rgba(255, 255, 255, 0.08), transparent 40%),
-    url('assets/zigzag-interior.avif') center / cover;
-  box-shadow: var(--shadow);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(0, 0, 0, 0.92)),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.08), transparent 42%),
+    rgba(12, 12, 12, 0.88);
+  box-shadow: 0 28px 76px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(14px);
   overflow: hidden;
+  position: relative;
+  isolation: isolate;
+}
+
+.booking-promo::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at top right, rgba(255, 255, 255, 0.12), transparent 28%),
+    radial-gradient(circle at left center, rgba(255, 255, 255, 0.05), transparent 18%);
+  pointer-events: none;
 }
 
 .section.booking-promo {
@@ -1409,10 +1426,29 @@ button {
 
 .booking-promo > div {
   max-width: 720px;
+  position: relative;
+  z-index: 1;
+}
+
+.booking-promo h2 {
+  margin: 0;
+  font-size: clamp(2.2rem, 5vw, 4.8rem);
+  line-height: 0.96;
+  letter-spacing: -0.04em;
+  text-transform: uppercase;
+}
+
+.booking-promo .eyebrow {
+  margin: 0 0 10px;
+  color: var(--amber);
+  font-size: 0.82rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
 }
 
 .booking-promo .btn {
   flex: 0 0 auto;
+  z-index: 1;
 }
 
 .booking-section .barber-profile-grid {
@@ -2944,7 +2980,7 @@ body::after {
   align-items: center;
   border: 1px solid rgba(232, 226, 211, 0.16);
   background:
-    linear-gradient(120deg, rgba(196, 161, 92, 0.16), transparent 38%),
+    linear-gradient(120deg, rgba(0,0,0, 0.16), transparent 38%),
     linear-gradient(180deg, #2d3030, #171a1b);
 }
 
@@ -3907,7 +3943,42 @@ body::after {
 }
 
 .booking-promo {
-  background: linear-gradient(180deg, #3a3a3a, #525252);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: clamp(28px, 5vw, 54px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 20px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)),
+    linear-gradient(135deg, rgba(15, 15, 15, 0.95), rgba(34, 34, 34, 0.86));
+  box-shadow: 0 34px 84px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(18px);
+  color: var(--text-main);
+}
+
+.booking-promo > div {
+  max-width: 720px;
+}
+
+.booking-promo h2 {
+  margin: 0;
+  font-size: clamp(2.2rem, 5vw, 4.8rem);
+  line-height: 0.96;
+}
+
+.booking-promo .eyebrow {
+  margin: 0 0 10px;
+  color: var(--amber);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.booking-promo .btn {
+  flex: 0 0 auto;
 }
 
 .blocked-phone-item strong {
@@ -3984,7 +4055,7 @@ body::after {
 }
 
 .barber-card-skeleton {
-  min-height: 260px;
+  min-height: 220px;
   border: 1px solid var(--line);
 }
 
@@ -4275,9 +4346,9 @@ body::after {
 }
 
 .booking-promo {
-  border: 1px solid rgba(43, 37, 30, 0.13);
+  border: 1px solid rgba(0, 0, 0, 0.52);
   background: #2b211b;
-  box-shadow: 0 24px 58px rgba(36, 30, 24, 0.16);
+  box-shadow: 0 24px 58px rgba(0, 0, 0, 0.16);
   color: #fffaf1;
 }
 
